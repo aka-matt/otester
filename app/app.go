@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+
+	"otester/internal/config"
 )
 
 type App struct {
@@ -36,4 +38,21 @@ func (a *App) GetAppInfo() (*AppInfo, error) {
 		Version: "1.0.0",
 		Name:    "otester",
 	}, nil
+}
+
+func (a *App) LoadConfig() (*config.ConfigView, error) {
+	return config.LoadConfigFromFile()
+}
+
+func (a *App) ReloadConfig() (*config.ConfigView, error) {
+	return config.LoadConfigFromFile()
+}
+
+func (a *App) ValidateConfig() (*config.ValidationResult, error) {
+	cfg, err := config.LoadConfigFromFile()
+	if err != nil {
+		return &config.ValidationResult{Valid: false, Errors: []string{err.Error()}}, nil
+	}
+	result := config.ValidateConfig(cfg)
+	return result, nil
 }
