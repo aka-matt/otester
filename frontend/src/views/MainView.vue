@@ -2,10 +2,18 @@
   <div class="main-view">
     <header class="top-bar">
       <div class="menu-section">
-        <span class="menu-item">File</span>
-        <span class="menu-item">View</span>
-        <span class="menu-item">Tools</span>
-        <span class="menu-item">Help</span>
+        <n-dropdown trigger="click" :options="fileMenuOptions" @select="handleMenuSelect">
+          <span class="menu-item">File</span>
+        </n-dropdown>
+        <n-dropdown trigger="click" :options="viewMenuOptions" @select="handleMenuSelect">
+          <span class="menu-item">View</span>
+        </n-dropdown>
+        <n-dropdown trigger="click" :options="toolsMenuOptions" @select="handleMenuSelect">
+          <span class="menu-item">Tools</span>
+        </n-dropdown>
+        <n-dropdown trigger="click" :options="helpMenuOptions" @select="handleMenuSelect">
+          <span class="menu-item">Help</span>
+        </n-dropdown>
       </div>
       <ThemeSwitcher />
     </header>
@@ -29,11 +37,70 @@
 </template>
 
 <script setup lang="ts">
+import { NDropdown, useMessage } from 'naive-ui'
 import EndpointList from '../components/EndpointList.vue'
 import RequestEditor from '../components/RequestEditor.vue'
 import ResponseViewer from '../components/ResponseViewer.vue'
 import ThemeSwitcher from '../components/ThemeSwitcher.vue'
 import StatusBar from '../components/StatusBar.vue'
+import { useConfigStore } from '../stores/config'
+
+const configStore = useConfigStore()
+const message = useMessage()
+
+const fileMenuOptions = [
+  { label: 'Reload Config', key: 'reload-config' },
+  { type: 'divider', key: 'd1' },
+  { label: 'Open Config Directory', key: 'open-config-dir' },
+  { label: 'Open Log Directory', key: 'open-log-dir' },
+  { type: 'divider', key: 'd2' },
+  { label: 'Exit', key: 'exit' },
+]
+
+const viewMenuOptions = [
+  { label: 'Toggle Left Panel', key: 'toggle-left' },
+  { label: 'Toggle Right Panel', key: 'toggle-right' },
+]
+
+const toolsMenuOptions = [
+  { label: 'Validate Config', key: 'validate-config' },
+  { label: 'Clear Token Cache', key: 'clear-tokens' },
+]
+
+const helpMenuOptions = [
+  { label: 'About', key: 'about' },
+]
+
+async function handleMenuSelect(key: string) {
+  switch (key) {
+    case 'reload-config':
+      await configStore.loadConfig()
+      message.success('Config reloaded')
+      break
+    case 'open-config-dir':
+      await window.go?.app.OpenConfigDirectory()
+      break
+    case 'open-log-dir':
+      await window.go?.app.OpenLogDirectory()
+      break
+    case 'validate-config':
+      const result = await window.go?.app.ValidateConfig()
+      if (result?.valid) {
+        message.success('Config is valid')
+      } else {
+        message.error('Config error: ' + (result?.errors?.join(', ') || 'Unknown'))
+      }
+      break
+    case 'clear-tokens':
+      await window.go?.app.ClearTokenCache()
+      message.success('Token cache cleared')
+      break
+    case 'about':
+      const info = await window.go?.app.GetAppInfo()
+      message.info(`${info?.name || 'otester'} v${info?.version || '1.0.0'}`)
+      break
+  }
+}
 </script>
 
 <style scoped>

@@ -1,11 +1,9 @@
 {
-  "$schema": "https://wails.io/schemas/config.v2.json",
   "name": "otester",
   "outputfilename": "otester",
   "frontend:install": "npm install",
   "frontend:build": "npm run build",
-  "frontend:dev:watcher": "npm run dev",
-  "frontend:dev:serverUrl": "auto",
+  "frontend:dev": "npm run dev",
   "version": "1.0.0",
   "outputType": "desktop"
 }

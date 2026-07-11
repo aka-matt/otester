@@ -48,10 +48,11 @@
           </select>
 
           <div v-if="bodyType !== 'none'" class="body-content">
-            <codemirror
+            <textarea
               v-model="body"
-              :style="{ height: '200px' }"
-              :extensions="codeMirrorExtensions"
+              class="body-textarea"
+              :placeholder="bodyType === 'json' ? '{\n  key: value\n}' : 'Enter request body...'"
+              spellcheck="false"
             />
           </div>
         </div>
@@ -95,7 +96,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { NTabs, NTabPane } from 'naive-ui'
 import { useRequestStore } from '../stores/request'
 import { useConfigStore } from '../stores/config'
@@ -156,10 +157,8 @@ const tokenStatus = computed(() =>
   oauthProfileId.value ? oauthStore.tokenStatuses[oauthProfileId.value] : null
 )
 
-// Placeholder extensions for CodeMirror - actual extensions need codemirror task
-const codeMirrorExtensions = ref([])
-
 async function sendRequest() {
+  console.log('[DEBUG] sendRequest called', { sending: sending.value, url: url.value, method: method.value })
   if (sending.value) {
     // Cancel
     if (requestStore.requestId) {
@@ -175,6 +174,7 @@ async function sendRequest() {
   responseStore.loading = true
 
   try {
+    console.log('[DEBUG] calling SendRequest', { requestId, url: url.value })
     const result = await window.go?.app.SendRequest({
       requestId,
       endpointId: configStore.selectedEndpointId || '',
@@ -188,21 +188,23 @@ async function sendRequest() {
       useOAuth: useOAuth.value,
       oauthProfileId: oauthProfileId.value,
     })
+    console.log('[DEBUG] SendRequest result', result)
 
     if (result) {
       responseStore.setResponse(result)
     }
 
     if (useOAuth.value && oauthProfileId.value) {
-      const status = await window.go?.app.GetTokenStatus(oauthProfileId.value)
+      const status = await window.go?.app.GetTokenStatus(oauthProfileId.value, null)
       if (status) {
         oauthStore.updateStatus(oauthProfileId.value, status)
       }
     }
   } catch (e) {
-    console.error('Request failed:', e)
+    console.error('[DEBUG] Request failed:', e)
   } finally {
     requestStore.sending = false
+    console.log('[DEBUG] sendRequest done')
   }
 }
 </script>
@@ -240,6 +242,24 @@ async function sendRequest() {
 
 .body-editor {
   padding: 12px 0;
+}
+
+.body-textarea {
+  width: 100%;
+  min-height: 200px;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  background: var(--input-bg);
+  color: var(--text-primary);
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  resize: vertical;
+}
+
+.body-textarea:focus {
+  outline: none;
+  border-color: var(--accent-color);
 }
 
 .body-type-select {

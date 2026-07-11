@@ -291,6 +291,92 @@ export namespace model {
 	        this.enabled = source["enabled"];
 	    }
 	}
+	export class RequestInput {
+	    requestId: string;
+	    endpointId: string;
+	    method: string;
+	    url: string;
+	    headers: KeyValue[];
+	    queryParams: KeyValue[];
+	    bodyType: string;
+	    body: string;
+	    timeoutSeconds: number;
+	    useOAuth: boolean;
+	    oauthProfileId: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new RequestInput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.requestId = source["requestId"];
+	        this.endpointId = source["endpointId"];
+	        this.method = source["method"];
+	        this.url = source["url"];
+	        this.headers = this.convertValues(source["headers"], KeyValue);
+	        this.queryParams = this.convertValues(source["queryParams"], KeyValue);
+	        this.bodyType = source["bodyType"];
+	        this.body = source["body"];
+	        this.timeoutSeconds = source["timeoutSeconds"];
+	        this.useOAuth = source["useOAuth"];
+	        this.oauthProfileId = source["oauthProfileId"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class ResponseOutput {
+	    requestId: string;
+	    statusCode: number;
+	    status: string;
+	    headers: Record<string, Array<string>>;
+	    body: string;
+	    bodyTruncated: boolean;
+	    durationMs: number;
+	    sizeBytes: number;
+	    contentType: string;
+	    usedOAuth: boolean;
+	    tokenFromCache: boolean;
+	    errorCode: string;
+	    errorMessage: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ResponseOutput(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.requestId = source["requestId"];
+	        this.statusCode = source["statusCode"];
+	        this.status = source["status"];
+	        this.headers = source["headers"];
+	        this.body = source["body"];
+	        this.bodyTruncated = source["bodyTruncated"];
+	        this.durationMs = source["durationMs"];
+	        this.sizeBytes = source["sizeBytes"];
+	        this.contentType = source["contentType"];
+	        this.usedOAuth = source["usedOAuth"];
+	        this.tokenFromCache = source["tokenFromCache"];
+	        this.errorCode = source["errorCode"];
+	        this.errorMessage = source["errorMessage"];
+	    }
+	}
 
 }
 

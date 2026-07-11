@@ -22,12 +22,20 @@ export function LoadConfig() {
   return window['go']['app']['App']['LoadConfig']();
 }
 
+export function OpenConfigDirectory() {
+  return window['go']['app']['App']['OpenConfigDirectory']();
+}
+
+export function OpenLogDirectory() {
+  return window['go']['app']['App']['OpenLogDirectory']();
+}
+
 export function ReloadConfig() {
   return window['go']['app']['App']['ReloadConfig']();
 }
 
-export function SendRequest(arg1, arg2) {
-  return window['go']['app']['App']['SendRequest'](arg1, arg2);
+export function SendRequest(arg1) {
+  return window['go']['app']['App']['SendRequest'](arg1);
 }
 
 export function ValidateConfig() {

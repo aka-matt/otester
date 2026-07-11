@@ -3,7 +3,7 @@
 import {app} from '../models';
 import {config} from '../models';
 import {oauth} from '../models';
-import {context} from '../models';
+import {model} from '../models';
 
 export function CancelRequest(arg1:string):Promise<void>;
 
@@ -15,8 +15,12 @@ export function GetTokenStatus(arg1:string,arg2:config.OAuthProfile):Promise<oau
 
 export function LoadConfig():Promise<config.ConfigView>;
 
+export function OpenConfigDirectory():Promise<void>;
+
+export function OpenLogDirectory():Promise<void>;
+
 export function ReloadConfig():Promise<config.ConfigView>;
 
-export function SendRequest(arg1:context.Context,arg2:config.OAuthProfile):Promise<string>;
+export function SendRequest(arg1:model.RequestInput):Promise<model.ResponseOutput>;
 
 export function ValidateConfig():Promise<config.ValidationResult>;

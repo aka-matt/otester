@@ -12,7 +12,10 @@ declare global {
         GetAppInfo: () => Promise<{ version: string; name: string }>
         SendRequest: (input: RequestInput) => Promise<ResponseOutput>
         CancelRequest: (requestId: string) => Promise<void>
-        GetTokenStatus: (profileId: string) => Promise<TokenStatus>
+        GetTokenStatus: (profileId: string, profile: any) => Promise<TokenStatus>
+        ClearTokenCache: () => Promise<void>
+        OpenConfigDirectory: () => Promise<void>
+        OpenLogDirectory: () => Promise<void>
       }
     }
   }
