@@ -15,6 +15,7 @@ declare global {
         GetTokenStatus: (profileId: string, profile: any) => Promise<TokenStatus>
         ClearTokenCache: () => Promise<void>
         OpenConfigDirectory: () => Promise<void>
+        OpenConfigFile: () => Promise<ConfigView | null>
         OpenLogDirectory: () => Promise<void>
       }
     }
@@ -52,13 +53,18 @@ export const useConfigStore = defineStore('config', () => {
     if (config.value?.variables[index]) selectedVariableIndex.value = index
   }
 
+  function setConfig(nextConfig: ConfigView) {
+    const previousSelection = selectedVariable.value
+    config.value = nextConfig
+    ensureSelectedVariable(previousSelection)
+  }
+
   async function loadConfig() {
     loading.value = true
     error.value = null
     try {
-      const previousSelection = selectedVariable.value
-      config.value = await window.go?.app.LoadConfig() ?? null
-      ensureSelectedVariable(previousSelection)
+      const nextConfig = await window.go?.app.LoadConfig() ?? null
+      if (nextConfig) setConfig(nextConfig)
     } catch (e) {
       error.value = String(e)
     } finally {
@@ -94,6 +100,7 @@ export const useConfigStore = defineStore('config', () => {
     selectEndpoint,
     ensureSelectedVariable,
     selectVariable,
+    setConfig,
     substituteVariables,
   }
 })

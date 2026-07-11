@@ -17,6 +17,8 @@ export function LoadConfig():Promise<config.ConfigView>;
 
 export function OpenConfigDirectory():Promise<void>;
 
+export function OpenConfigFile():Promise<config.ConfigView>;
+
 export function OpenLogDirectory():Promise<void>;
 
 export function ReloadConfig():Promise<config.ConfigView>;

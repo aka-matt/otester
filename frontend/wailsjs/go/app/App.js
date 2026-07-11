@@ -26,6 +26,10 @@ export function OpenConfigDirectory() {
   return window['go']['app']['App']['OpenConfigDirectory']();
 }
 
+export function OpenConfigFile() {
+  return window['go']['app']['App']['OpenConfigFile']();
+}
+
 export function OpenLogDirectory() {
   return window['go']['app']['App']['OpenLogDirectory']();
 }

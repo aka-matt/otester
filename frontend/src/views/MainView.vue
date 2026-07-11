@@ -44,14 +44,16 @@ import ResponseViewer from '../components/ResponseViewer.vue'
 import ThemeSwitcher from '../components/ThemeSwitcher.vue'
 import StatusBar from '../components/StatusBar.vue'
 import { useConfigStore } from '../stores/config'
+import { useResponseStore } from '../stores/response'
 
 const configStore = useConfigStore()
+const responseStore = useResponseStore()
 const message = useMessage()
 
 const fileMenuOptions = [
   { label: 'Reload Config', key: 'reload-config' },
   { type: 'divider', key: 'd1' },
-  { label: 'Open Config Directory', key: 'open-config-dir' },
+  { label: 'Open Config File', key: 'open-config-file' },
   { label: 'Open Log Directory', key: 'open-log-dir' },
   { type: 'divider', key: 'd2' },
   { label: 'Exit', key: 'exit' },
@@ -77,8 +79,16 @@ async function handleMenuSelect(key: string) {
       await configStore.loadConfig()
       message.success('Config reloaded')
       break
-    case 'open-config-dir':
-      await window.go?.app.OpenConfigDirectory()
+    case 'open-config-file':
+      try {
+        const config = await window.go?.app.OpenConfigFile()
+        if (config) {
+          configStore.setConfig(config)
+          responseStore.clear()
+        }
+      } catch (error) {
+        message.error('Failed to open config file: ' + String(error))
+      }
       break
     case 'open-log-dir':
       await window.go?.app.OpenLogDirectory()
