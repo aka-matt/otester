@@ -24,6 +24,7 @@ declare global {
 export const useConfigStore = defineStore('config', () => {
   const config = ref<ConfigView | null>(null)
   const selectedEndpointId = ref<string | null>(null)
+  const selectedVariableIndex = ref<number | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
 
@@ -32,11 +33,26 @@ export const useConfigStore = defineStore('config', () => {
     return config.value.endpoints.find(ep => ep.id === selectedEndpointId.value) || null
   })
 
+  const selectedVariable = computed(() => selectedVariableIndex.value === null
+    ? null : config.value?.variables[selectedVariableIndex.value] ?? null)
+
+  function ensureSelectedVariable() {
+    const variables = config.value?.variables ?? []
+    const current = selectedVariable.value
+    if (current && variables.some(v => v.id === current.id && v.environment === current.environment)) return
+    selectedVariableIndex.value = variables.length ? 0 : null
+  }
+
+  function selectVariable(index: number) {
+    if (config.value?.variables[index]) selectedVariableIndex.value = index
+  }
+
   async function loadConfig() {
     loading.value = true
     error.value = null
     try {
       config.value = await window.go?.app.LoadConfig() ?? null
+      ensureSelectedVariable()
     } catch (e) {
       error.value = String(e)
     } finally {
@@ -53,23 +69,23 @@ export const useConfigStore = defineStore('config', () => {
   }
 
   function substituteVariables(text: string): string {
-    if (!config.value) return text
-    let result = text
-    for (const v of config.value.variables) {
-      result = result.replace(new RegExp(`{{${v.id}}}`, 'g'), v.base_url)
-    }
-    return result
+    const variable = selectedVariable.value
+    return variable ? text.replace(new RegExp(`{{${variable.id}}}`, 'g'), variable.base_url) : text
   }
 
   return {
     config,
     selectedEndpointId,
     selectedEndpoint,
+    selectedVariableIndex,
+    selectedVariable,
     loading,
     error,
     loadConfig,
     reloadConfig,
     selectEndpoint,
+    ensureSelectedVariable,
+    selectVariable,
     substituteVariables,
   }
 })
