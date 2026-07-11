@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"runtime"
 
+	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
+
 	"otester/internal/config"
 	"otester/internal/httpclient"
 	"otester/internal/model"
@@ -15,9 +17,12 @@ import (
 )
 
 type App struct {
-	ctx        context.Context
-	oauth      *oauth.MicrosoftOAuth
-	httpClient *httpclient.Client
+	ctx                context.Context
+	oauth              *oauth.MicrosoftOAuth
+	httpClient         *httpclient.Client
+	activeConfigPath   string
+	loadConfigFromPath func(string) (*config.ConfigView, error)
+	openFileDialog     func() (string, error)
 }
 
 type AppInfo struct {
@@ -26,15 +31,27 @@ type AppInfo struct {
 }
 
 func NewApp() *App {
-	return &App{
-		oauth:      oauth.NewMicrosoftOAuth(),
-		httpClient: httpclient.NewClient(),
+	a := &App{
+		oauth:              oauth.NewMicrosoftOAuth(),
+		httpClient:         httpclient.NewClient(),
+		loadConfigFromPath: config.LoadConfigFromPath,
 	}
+	a.openFileDialog = func() (string, error) {
+		return wailsruntime.OpenFileDialog(a.ctx, wailsruntime.OpenDialogOptions{
+			Filters: []wailsruntime.FileFilter{{DisplayName: "JSON files", Pattern: "*.json"}},
+		})
+	}
+	return a
 }
 
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
-	config.LoadConfigFromFile()
+	cwd, err := os.Getwd()
+	if err != nil {
+		return
+	}
+	a.activeConfigPath = filepath.Join(cwd, "config.json")
+	a.LoadConfig()
 }
 
 func (a *App) DomReady(ctx context.Context) {
@@ -55,11 +72,28 @@ func (a *App) GetAppInfo() (*AppInfo, error) {
 }
 
 func (a *App) LoadConfig() (*config.ConfigView, error) {
-	return config.LoadConfigFromFile()
+	return a.loadConfigFromPath(a.activeConfigPath)
 }
 
 func (a *App) ReloadConfig() (*config.ConfigView, error) {
-	return config.LoadConfigFromFile()
+	return a.loadConfigFromPath(a.activeConfigPath)
+}
+
+func (a *App) OpenConfigFile() (*config.ConfigView, error) {
+	selectedPath, err := a.openFileDialog()
+	if err != nil {
+		return nil, err
+	}
+	if selectedPath == "" {
+		return nil, nil
+	}
+
+	cfg, err := a.loadConfigFromPath(selectedPath)
+	if err != nil {
+		return nil, err
+	}
+	a.activeConfigPath = selectedPath
+	return cfg, nil
 }
 
 func (a *App) ValidateConfig() (*config.ValidationResult, error) {

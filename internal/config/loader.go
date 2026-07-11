@@ -17,7 +17,10 @@ func LoadConfigFromFile() (*ConfigView, error) {
 	}
 
 	configPath := filepath.Join(cwd, "config.json")
+	return LoadConfigFromPath(configPath)
+}
 
+func LoadConfigFromPath(configPath string) (*ConfigView, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -215,9 +218,9 @@ func parseAuthConfig(raw interface{}) AuthConfig {
 		return AuthConfig{Type: "none"}
 	}
 	return AuthConfig{
-		Type:                              getString(m, "type"),
-		ProfileID:                         getString(m, "profileId"),
-		AllowAuthorizationHeaderOverride:  getBool(m, "allowAuthorizationHeaderOverride", false),
+		Type:                             getString(m, "type"),
+		ProfileID:                        getString(m, "profileId"),
+		AllowAuthorizationHeaderOverride: getBool(m, "allowAuthorizationHeaderOverride", false),
 	}
 }
 

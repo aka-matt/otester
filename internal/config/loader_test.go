@@ -11,10 +11,54 @@ func chdirToProjectRoot(t *testing.T) func() {
 	if err != nil {
 		t.Fatalf("Failed to get cwd: %v", err)
 	}
-	if err := os.Chdir("/mnt/c/dev/GitHub/otester"); err != nil {
+	projectRoot, err := filepath.Abs("../..")
+	if err != nil {
+		t.Fatalf("Failed to determine project root: %v", err)
+	}
+	if err := os.Chdir(projectRoot); err != nil {
 		t.Fatalf("Failed to chdir to project root: %v", err)
 	}
 	return func() { os.Chdir(oldCwd) }
+}
+
+func TestLoadConfigFromPathUsesProvidedPath(t *testing.T) {
+	configPath := filepath.Join(t.TempDir(), "custom-config.json")
+	if err := os.WriteFile(configPath, []byte(`{"app":{"name":"custom"}}`), 0644); err != nil {
+		t.Fatalf("Failed to write test config: %v", err)
+	}
+
+	cfg, err := LoadConfigFromPath(configPath)
+	if err != nil {
+		t.Fatalf("LoadConfigFromPath failed: %v", err)
+	}
+	if cfg.ConfigPath != configPath {
+		t.Errorf("Expected ConfigPath %q, got %q", configPath, cfg.ConfigPath)
+	}
+}
+
+func TestLoadConfigFromPathInvalidJSONRetainsCurrentConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	validPath := filepath.Join(tmpDir, "valid.json")
+	invalidPath := filepath.Join(tmpDir, "invalid.json")
+	if err := os.WriteFile(validPath, []byte(`{"app":{"name":"current"}}`), 0644); err != nil {
+		t.Fatalf("Failed to write valid test config: %v", err)
+	}
+	if err := os.WriteFile(invalidPath, []byte("invalid json"), 0644); err != nil {
+		t.Fatalf("Failed to write invalid test config: %v", err)
+	}
+
+	current, err := LoadConfigFromPath(validPath)
+	if err != nil {
+		t.Fatalf("LoadConfigFromPath failed: %v", err)
+	}
+
+	_, err = LoadConfigFromPath(invalidPath)
+	if err == nil {
+		t.Fatal("Expected error for invalid JSON")
+	}
+	if got := GetCurrentConfig(); got != current {
+		t.Errorf("Expected current config to remain %p, got %p", current, got)
+	}
 }
 
 func TestLoadConfigFromFile(t *testing.T) {
@@ -27,8 +71,8 @@ func TestLoadConfigFromFile(t *testing.T) {
 	if cfg.App.Title != "otester - API Debugger" {
 		t.Errorf("Expected title 'otester - API Debugger', got '%s'", cfg.App.Title)
 	}
-	if len(cfg.Endpoints) != 1 {
-		t.Errorf("Expected 1 endpoint, got %d", len(cfg.Endpoints))
+	if len(cfg.Endpoints) != 4 {
+		t.Errorf("Expected 4 endpoints, got %d", len(cfg.Endpoints))
 	}
 }
 
