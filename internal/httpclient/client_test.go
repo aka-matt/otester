@@ -2,9 +2,11 @@ package httpclient
 
 import (
 	"context"
+	"crypto/tls"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -60,7 +62,7 @@ func TestClient_DoRequest_InvalidURL(t *testing.T) {
 }
 
 func TestClient_DoRequest_Success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte(`{"status":"ok"}`))
@@ -68,6 +70,9 @@ func TestClient_DoRequest_Success(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient()
+	client.client.Transport = &http.Transport{
+		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+	}
 
 	input := &model.RequestInput{
 		RequestID:      "test-success",
@@ -86,6 +91,15 @@ func TestClient_DoRequest_Success(t *testing.T) {
 	}
 	if output.StatusCode != http.StatusOK {
 		t.Errorf("expected StatusCode 200, got %d", output.StatusCode)
+	}
+	if output.TLS == nil {
+		t.Fatal("expected TLS info to be populated for HTTPS server")
+	}
+	if output.TLS.Status != "ok" {
+		t.Errorf("expected TLS.Status=ok, got %s", output.TLS.Status)
+	}
+	if len(output.TLS.Certificates) < 1 {
+		t.Errorf("expected >= 1 certificate, got %d", len(output.TLS.Certificates))
 	}
 }
 
@@ -113,6 +127,12 @@ func TestClient_DoRequest_Timeout(t *testing.T) {
 
 	if output.ErrorCode != string(model.ErrRequestTimeout) {
 		t.Errorf("expected ErrorCode %s, got %s", model.ErrRequestTimeout, output.ErrorCode)
+	}
+	if output.TLS == nil {
+		t.Fatal("expected TLS info to be populated even on timeout")
+	}
+	if output.TLS.Status != "no_tls_attempted" {
+		t.Errorf("expected TLS.Status=no_tls_attempted for timeout, got %s", output.TLS.Status)
 	}
 }
 
@@ -232,6 +252,45 @@ func TestClient_DoRequest_Headers(t *testing.T) {
 	}
 	if receivedHeader != "my-value" {
 		t.Errorf("expected header 'my-value', got %q", receivedHeader)
+	}
+}
+
+func TestClient_DoRequest_TLSHandshakeFailure(t *testing.T) {
+	// httptest server uses "example.com" as its cert's DNS name; we connect
+	// via 127.0.0.1 with hostname verification on, which causes x509 hostname mismatch.
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	// Use the default transport (does NOT skip verify) so the handshake fails.
+
+	// Replace the host portion of server.URL with 127.0.0.1 but keep the port.
+	u, _ := url.Parse(server.URL)
+	host := "127.0.0.1"
+	inputURL := strings.Replace(server.URL, u.Hostname(), host, 1)
+
+	input := &model.RequestInput{
+		RequestID:      "test-tls-fail",
+		Method:         "GET",
+		URL:            inputURL,
+		TimeoutSeconds: 5,
+	}
+
+	output, err := client.DoRequest(context.Background(), input)
+	if err != nil {
+		t.Fatalf("DoRequest returned error: %v", err)
+	}
+
+	if output.TLS == nil {
+		t.Fatal("expected TLS info on handshake failure")
+	}
+	if output.TLS.Status != "handshake_failed" {
+		t.Errorf("expected TLS.Status=handshake_failed, got %s", output.TLS.Status)
+	}
+	if !strings.Contains(output.TLS.Error, "x509:") && !strings.Contains(output.TLS.Error, "tls:") {
+		t.Errorf("expected tls: or x509: in error, got %q", output.TLS.Error)
 	}
 }
 

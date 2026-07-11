@@ -52,11 +52,11 @@ func (c *Client) DoRequest(ctx context.Context, input *model.RequestInput) (*mod
 	duration := time.Since(start)
 
 	if err != nil {
-		return handleRequestError(input.RequestID, reqCtx.Err(), err, duration)
+		return handleRequestError(input.RequestID, reqCtx.Err(), err, duration, req)
 	}
 	defer resp.Body.Close()
 
-	return ParseResponse(resp, input.RequestID, duration)
+	return ParseResponse(resp, req, input.RequestID, duration)
 }
 
 func (c *Client) CancelRequest(requestID string) error {

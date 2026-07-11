@@ -59,7 +59,7 @@ func TestParseResponse_Success(t *testing.T) {
 	defer resp.Body.Close()
 
 	duration := 100 * time.Millisecond
-	output, err := ParseResponse(resp, "test-request", duration)
+	output, err := ParseResponse(resp, nil, "test-request", duration)
 	if err != nil {
 		t.Fatalf("ParseResponse failed: %v", err)
 	}
@@ -78,6 +78,9 @@ func TestParseResponse_Success(t *testing.T) {
 	}
 	if output.DurationMs != duration.Milliseconds() {
 		t.Errorf("expected DurationMs %d, got %d", duration.Milliseconds(), output.DurationMs)
+	}
+	if output.TLS == nil || output.TLS.Status != "no_tls_attempted" {
+		t.Errorf("expected TLS.Status=no_tls_attempted, got %+v", output.TLS)
 	}
 }
 
@@ -100,7 +103,7 @@ func TestParseResponse_TruncatedBody(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	output, err := ParseResponse(resp, "test-truncated", 100*time.Millisecond)
+	output, err := ParseResponse(resp, nil, "test-truncated", 100*time.Millisecond)
 	if err != nil {
 		t.Fatalf("ParseResponse failed: %v", err)
 	}
@@ -114,7 +117,7 @@ func TestParseResponse_TruncatedBody(t *testing.T) {
 }
 
 func TestHandleRequestError_Timeout(t *testing.T) {
-	output, err := handleRequestError("test-timeout", context.DeadlineExceeded, nil, 30*time.Second)
+	output, err := handleRequestError("test-timeout", context.DeadlineExceeded, nil, 30*time.Second, nil)
 	if err != nil {
 		t.Fatalf("handleRequestError returned error: %v", err)
 	}
@@ -128,7 +131,7 @@ func TestHandleRequestError_Timeout(t *testing.T) {
 }
 
 func TestHandleRequestError_Cancelled(t *testing.T) {
-	output, err := handleRequestError("test-cancelled", context.Canceled, nil, 100*time.Millisecond)
+	output, err := handleRequestError("test-cancelled", context.Canceled, nil, 100*time.Millisecond, nil)
 	if err != nil {
 		t.Fatalf("handleRequestError returned error: %v", err)
 	}
@@ -143,7 +146,7 @@ func TestHandleRequestError_Cancelled(t *testing.T) {
 
 func TestHandleRequestError_ConnectionFailed(t *testing.T) {
 	err := errors.New("connection refused")
-	output, err2 := handleRequestError("test-conn", nil, err, 0)
+	output, err2 := handleRequestError("test-conn", nil, err, 0, nil)
 	if err2 != nil {
 		t.Fatalf("handleRequestError returned error: %v", err2)
 	}
