@@ -64,8 +64,10 @@ func (m *MicrosoftOAuth) GetAccessToken(ctx context.Context, profile *config.OAu
 			expiresAt = time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
 		}
 
+		// Redact token before caching
+		redactedToken := security.RedactBearerToken(tokenResp.AccessToken)
 		m.cache.Set(cacheKey, &CachedToken{
-			AccessToken: tokenResp.AccessToken,
+			AccessToken: redactedToken,
 			ExpiresAt:   expiresAt,
 		})
 
@@ -105,6 +107,10 @@ func (m *MicrosoftOAuth) fetchToken(ctx context.Context, profile *config.OAuthPr
 	}
 	defer resp.Body.Close()
 
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("token request failed with status code %d", resp.StatusCode)
+	}
+
 	var tokenResp TokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
 		return nil, fmt.Errorf("failed to parse token response: %w", err)
@@ -113,8 +119,6 @@ func (m *MicrosoftOAuth) fetchToken(ctx context.Context, profile *config.OAuthPr
 	if tokenResp.AccessToken == "" {
 		return nil, fmt.Errorf("access_token missing from token response")
 	}
-
-	_ = security.RedactJSON("") // Use the security package for potential future redaction
 
 	return &tokenResp, nil
 }
@@ -132,9 +136,7 @@ func (m *MicrosoftOAuth) GetTokenStatus(profileID string, profile *config.OAuthP
 
 	cacheKey := BuildCacheKey(tokenURL, profile.ClientID, profile.Scope)
 
-	m.cache.mu.RLock()
-	token, ok := m.cache.tokens[cacheKey]
-	m.cache.mu.RUnlock()
+	token, ok := m.cache.GetStatus(cacheKey)
 
 	if !ok {
 		return &TokenStatus{ProfileID: profileID, HasToken: false}, nil

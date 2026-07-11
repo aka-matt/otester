@@ -54,6 +54,14 @@ func (c *TokenCache) Clear() {
 	c.tokens = make(map[string]*CachedToken)
 }
 
+// GetStatus returns the token status for a given key without exposing internal mutex
+func (c *TokenCache) GetStatus(key string) (token *CachedToken, ok bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	token, ok = c.tokens[key]
+	return token, ok
+}
+
 func BuildCacheKey(tokenURL, clientID, scope string) string {
 	return tokenURL + "|" + clientID + "|" + scope
 }
