@@ -11,8 +11,11 @@
         data-testid="variable-option"
         @click="selectVariable(index)"
       >
-        {{ variable.environment || variable.id }} ({{ variable.id }})
+        {{ variable.environment ? `${variable.environment} (${variable.id})` : variable.id }}
       </button>
+      <p v-if="(configStore.config?.variables ?? []).length === 0" class="variable-empty">
+        No configuration variables available.
+      </p>
     </div>
 
     <div class="search-box">
@@ -222,6 +225,12 @@ function selectVariable(index: number) {
 .endpoint-item:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.variable-empty {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 .search-input {

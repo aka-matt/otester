@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount, type VueWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import { nextTick } from 'vue'
 import EndpointList from './EndpointList.vue'
 import { useConfigStore } from '../stores/config'
 import { useRequestStore } from '../stores/request'
@@ -32,6 +33,7 @@ const fixtureConfig: ConfigView = {
   variables: [
     { id: 'api', base_url: 'https://staging.example', environment: 'staging' },
     { id: 'api', base_url: 'https://prod.example', environment: 'production' },
+    { id: 'fallback', base_url: 'https://fallback.example', environment: '' },
   ],
   oauthProfiles: [],
   endpointGroups: [
@@ -69,6 +71,17 @@ describe('EndpointList', () => {
 
     expect(configStore.selectedVariable?.environment).toBe('production')
     expect(requestStore.url).toBe('https://prod.example/users')
+  })
+
+  it('renders an empty-state message when no variables are configured', async () => {
+    configStore.config = { ...fixtureConfig, variables: [] }
+    await nextTick()
+
+    expect(wrapper.text()).toContain('No configuration variables available.')
+  })
+
+  it('uses only the variable ID when its environment is absent', () => {
+    expect(wrapper.findAll('[data-testid="variable-option"]')[2].text()).toBe('fallback')
   })
 
   it('renders configured groups as differently accented endpoint cards', () => {
