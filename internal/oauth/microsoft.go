@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"otester/internal/config"
-	"otester/internal/security"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -64,10 +63,9 @@ func (m *MicrosoftOAuth) GetAccessToken(ctx context.Context, profile *config.OAu
 			expiresAt = time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
 		}
 
-		// Redact token before caching
-		redactedToken := security.RedactBearerToken(tokenResp.AccessToken)
+		// Store unredacted token in cache; redaction is only for logging/display
 		m.cache.Set(cacheKey, &CachedToken{
-			AccessToken: redactedToken,
+			AccessToken: tokenResp.AccessToken,
 			ExpiresAt:   expiresAt,
 		})
 
