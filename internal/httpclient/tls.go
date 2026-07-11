@@ -4,14 +4,19 @@ import (
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
+	"crypto/sha1"
+	"crypto/sha256"
 	"crypto/tls"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
 	"math"
 	"strings"
 	"time"
+
+	"otester/internal/model"
 )
 
 // tlsVersionString maps a TLS protocol version constant to its string label.
@@ -180,4 +185,112 @@ func extractKeySize(pub any) int {
 	default:
 		return 0
 	}
+}
+
+// buildConnectionView returns a TLSConnectionView populated from cs, or nil if cs is nil.
+func buildConnectionView(cs *tls.ConnectionState) *model.TLSConnectionView {
+	if cs == nil {
+		return nil
+	}
+	v := &model.TLSConnectionView{
+		Version:            tlsVersionString(cs.Version),
+		CipherSuite:        fmt.Sprintf("0x%04x", cs.CipherSuite),
+		CipherSuiteName:    cipherSuiteName(cs.CipherSuite),
+		NegotiatedProtocol: cs.NegotiatedProtocol,
+		ServerName:         cs.ServerName,
+		Resumed:            cs.DidResume,
+		OCSPStapled:        cs.OCSPResponse != nil,
+		PeerCertificates:   len(cs.PeerCertificates),
+	}
+	if len(cs.SignedCertificateTimestamps) > 0 {
+		scts := make([]string, 0, len(cs.SignedCertificateTimestamps))
+		for _, sct := range cs.SignedCertificateTimestamps {
+			scts = append(scts, base64.StdEncoding.EncodeToString(sct))
+		}
+		v.SCTs = scts
+	}
+	return v
+}
+
+// buildCertificateViews converts a server-returned cert chain into CertificateView slices,
+// labeling position by chain order (leaf / intermediate / root).
+func buildCertificateViews(certs []*x509.Certificate) []model.CertificateView {
+	if len(certs) == 0 {
+		return []model.CertificateView{}
+	}
+	out := make([]model.CertificateView, 0, len(certs))
+	for i, c := range certs {
+		out = append(out, buildCertificateView(c, positionLabel(i, len(certs))))
+	}
+	return out
+}
+
+// buildCertificateView converts one x509.Certificate into the JSON view model.
+func buildCertificateView(cert *x509.Certificate, position string) model.CertificateView {
+	now := time.Now()
+
+	maxPathLen := -1
+	if cert.MaxPathLen > 0 || cert.MaxPathLenZero {
+		maxPathLen = cert.MaxPathLen
+	}
+
+	policies := make([]string, 0, len(cert.PolicyIdentifiers))
+	for _, p := range cert.PolicyIdentifiers {
+		policies = append(policies, p.String())
+	}
+
+	pemStr := certToPEM(cert.Raw)
+	pubPEM, _ := publicKeyPEM(cert.PublicKey)
+
+	var (
+		subjKeyID string
+		authKeyID string
+	)
+	if len(cert.SubjectKeyId) > 0 {
+		subjKeyID = formatFingerprint(cert.SubjectKeyId, ":")
+	}
+	if len(cert.AuthorityKeyId) > 0 {
+		authKeyID = formatFingerprint(cert.AuthorityKeyId, ":")
+	}
+
+	return model.CertificateView{
+		Position:              position,
+		Subject:               cert.Subject.String(),
+		Issuer:                cert.Issuer.String(),
+		SerialNumber:          cert.SerialNumber.Text(16),
+		Version:               cert.Version,
+		SignatureAlgorithm:    cert.SignatureAlgorithm.String(),
+		NotBefore:             cert.NotBefore.UTC().Format(time.RFC3339),
+		NotAfter:              cert.NotAfter.UTC().Format(time.RFC3339),
+		IsExpired:             now.After(cert.NotAfter),
+		IsNotYetValid:         now.Before(cert.NotBefore),
+		DaysToExpiry:          daysUntilExpiry(cert.NotAfter),
+		SubjectKeyId:          subjKeyID,
+		AuthorityKeyId:        authKeyID,
+		SANs:                  sanToStrings(cert),
+		KeyAlgorithm:          extractKeyAlgorithm(cert.PublicKey),
+		KeySize:               extractKeySize(cert.PublicKey),
+		PublicKeyPEM:          pubPEM,
+		FingerprintSHA1:       formatFingerprint(sha1Of(cert.Raw), ":"),
+		FingerprintSHA256:     formatFingerprint(sha256Of(cert.Raw), ":"),
+		IsCA:                  cert.BasicConstraintsValid && cert.IsCA,
+		MaxPathLength:         maxPathLen,
+		KeyUsage:              keyUsageToStrings(cert.KeyUsage),
+		ExtendedKeyUsage:      extKeyUsageToStrings(cert.ExtKeyUsage),
+		CRLDistributionPoints: cert.CRLDistributionPoints,
+		Policies:              policies,
+		RawDER:                base64.StdEncoding.EncodeToString(cert.Raw),
+		PEM:                   pemStr,
+		SignatureBytes:        base64.StdEncoding.EncodeToString(cert.Signature),
+	}
+}
+
+func sha1Of(b []byte) []byte {
+	h := sha1.Sum(b)
+	return h[:]
+}
+
+func sha256Of(b []byte) []byte {
+	h := sha256.Sum256(b)
+	return h[:]
 }

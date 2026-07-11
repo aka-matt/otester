@@ -10,6 +10,8 @@ import (
 	"crypto/x509/pkix"
 	"math/big"
 	"net"
+	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"testing"
 	"time"
@@ -258,4 +260,107 @@ func sliceContains(s []string, v string) bool {
 		}
 	}
 	return false
+}
+
+func TestBuildCertificateViews_Labels(t *testing.T) {
+	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+	// Chain: [leaf (self-signed as a stand-in), leaf]  → positions: leaf, root
+	cert1 := buildSelfSignedCert(t, &priv.PublicKey, priv, "a.example")
+	cert2 := buildSelfSignedCert(t, &priv.PublicKey, priv, "b.example")
+	got := buildCertificateViews([]*x509.Certificate{cert1, cert2})
+	if len(got) != 2 {
+		t.Fatalf("expected 2 certs, got %d", len(got))
+	}
+	if got[0].Position != "leaf" {
+		t.Errorf("first position = %q, want leaf", got[0].Position)
+	}
+	if got[1].Position != "root" {
+		t.Errorf("last position = %q, want root", got[1].Position)
+	}
+}
+
+func TestBuildCertificateView_Fields(t *testing.T) {
+	priv, _ := rsa.GenerateKey(rand.Reader, 2048)
+	cert := buildSelfSignedCert(t, &priv.PublicKey, priv, "leaf.example")
+	got := buildCertificateView(cert, "leaf")
+
+	if got.Subject == "" {
+		t.Error("Subject empty")
+	}
+	if got.Issuer == "" {
+		t.Error("Issuer empty")
+	}
+	if got.SerialNumber == "" {
+		t.Error("SerialNumber empty")
+	}
+	if got.SignatureAlgorithm == "" {
+		t.Error("SignatureAlgorithm empty")
+	}
+	if got.NotBefore == "" || got.NotAfter == "" {
+		t.Errorf("NotBefore/NotAfter empty: %q / %q", got.NotBefore, got.NotAfter)
+	}
+	if got.IsExpired {
+		t.Error("freshly built cert should not be expired")
+	}
+	if got.IsNotYetValid {
+		t.Error("freshly built cert should be currently valid")
+	}
+	if got.KeyAlgorithm != "RSA" {
+		t.Errorf("KeyAlgorithm = %q, want RSA", got.KeyAlgorithm)
+	}
+	if got.KeySize != 2048 {
+		t.Errorf("KeySize = %d, want 2048", got.KeySize)
+	}
+	if got.PublicKeyPEM == "" || !contains(got.PublicKeyPEM, "BEGIN PUBLIC KEY") {
+		t.Errorf("PublicKeyPEM invalid: %q", got.PublicKeyPEM)
+	}
+	if got.FingerprintSHA1 == "" || got.FingerprintSHA256 == "" {
+		t.Errorf("fingerprints empty: SHA1=%q SHA256=%q", got.FingerprintSHA1, got.FingerprintSHA256)
+	}
+	if got.PEM == "" || !contains(got.PEM, "BEGIN CERTIFICATE") {
+		t.Errorf("PEM invalid: %q", got.PEM)
+	}
+	if got.RawDER == "" {
+		t.Error("RawDER empty")
+	}
+	if got.SignatureBytes == "" {
+		t.Error("SignatureBytes empty")
+	}
+	if !sliceContains(got.KeyUsage, "DigitalSignature") {
+		t.Errorf("expected DigitalSignature in key usage: %v", got.KeyUsage)
+	}
+	if !sliceContains(got.ExtendedKeyUsage, "ServerAuth") {
+		t.Errorf("expected ServerAuth in extended key usage: %v", got.ExtendedKeyUsage)
+	}
+}
+
+func TestBuildConnectionView_Nil(t *testing.T) {
+	got := buildConnectionView(nil)
+	if got != nil {
+		t.Errorf("expected nil for nil ConnectionState, got %+v", got)
+	}
+}
+
+func TestBuildConnectionView_TLS13(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	}))
+	defer server.Close()
+
+	resp, err := server.Client().Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	got := buildConnectionView(resp.TLS)
+	if got == nil {
+		t.Fatal("expected non-nil connection view")
+	}
+	if got.Version != "TLS 1.2" && got.Version != "TLS 1.3" {
+		t.Errorf("Version = %q, expected TLS 1.2 or 1.3", got.Version)
+	}
+	if got.PeerCertificates < 1 {
+		t.Errorf("PeerCertificates = %d, expected >= 1", got.PeerCertificates)
+	}
 }
