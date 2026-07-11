@@ -119,3 +119,55 @@ export interface TokenStatus {
   expiresAt: string | null
   fromCache: boolean
 }
+
+export interface TLSConnectionView {
+  version: string
+  cipherSuite: string
+  cipherSuiteName: string
+  negotiatedProtocol?: string
+  serverName: string
+  resumed: boolean
+  scts?: string[]
+  ocspStapled: boolean
+  peerCertificates: number
+}
+
+export interface CertificateView {
+  position: string
+  subject: string
+  issuer: string
+  serialNumber: string
+  version: number
+  signatureAlgorithm: string
+  notBefore: string
+  notAfter: string
+  isExpired: boolean
+  isNotYetValid: boolean
+  daysToExpiry: number
+  subjectKeyId: string
+  authorityKeyId: string
+  sans: string[]
+  keyAlgorithm: string
+  keySize: number
+  publicKeyPem: string
+  fingerprintSha1: string
+  fingerprintSha256: string
+  isCa: boolean
+  maxPathLength: number
+  keyUsage: string[]
+  extendedKeyUsage: string[]
+  crlDistributionPoints?: string[]
+  policies?: string[]
+  rawDer: string
+  pem: string
+  signatureBytes: string
+}
+
+export interface TLSInfo {
+  status: 'ok' | 'handshake_failed' | 'no_tls_attempted'
+  error?: string
+  targetHost: string
+  attemptedServerName?: string
+  connection?: TLSConnectionView
+  certificates: CertificateView[]
+}
