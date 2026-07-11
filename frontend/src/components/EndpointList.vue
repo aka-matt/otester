@@ -18,29 +18,11 @@
       </p>
     </div>
 
-    <div class="search-box">
-      <input
-        v-model="searchQuery"
-        type="text"
-        placeholder="Search endpoints..."
-        class="acrylic-input search-input"
-      />
-    </div>
-
-    <div class="filter-row">
-      <select v-model="methodFilter" class="method-filter">
-        <option value="">All Methods</option>
-        <option value="GET">GET</option>
-        <option value="POST">POST</option>
-        <option value="PUT">PUT</option>
-        <option value="PATCH">PATCH</option>
-        <option value="DELETE">DELETE</option>
-      </select>
-    </div>
+    <hr data-testid="endpoint-divider" class="endpoint-divider">
 
     <div class="groups">
       <section
-        v-for="group in filteredGroups"
+        v-for="group in groups"
         :key="group.id"
         class="group endpoint-group-card"
         :style="{ '--group-accent': groupAccent(group.id) }"
@@ -98,7 +80,7 @@
         </div>
       </section>
 
-      <p v-if="filteredEndpoints.length === 0" class="empty-search">No endpoints match your search.</p>
+      <p v-if="endpoints.length === 0" class="empty-endpoints">No endpoints configured.</p>
     </div>
   </div>
 </template>
@@ -114,44 +96,26 @@ const configStore = useConfigStore()
 const requestStore = useRequestStore()
 const responseStore = useResponseStore()
 
-const searchQuery = ref('')
-const methodFilter = ref('')
 const collapsedGroups = ref<Record<string, boolean>>({})
 const groupPalette = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4']
 
 const selectedEndpointId = computed(() => configStore.selectedEndpointId)
 
-const filteredEndpoints = computed(() => {
-  let eps = configStore.config?.endpoints || []
+const endpoints = computed(() => configStore.config?.endpoints ?? [])
 
-  if (searchQuery.value) {
-    const q = searchQuery.value.toLowerCase()
-    eps = eps.filter(ep =>
-      ep.name.toLowerCase().includes(q) ||
-      ep.url.toLowerCase().includes(q)
-    )
-  }
-
-  if (methodFilter.value) {
-    eps = eps.filter(ep => ep.method === methodFilter.value)
-  }
-
-  return eps
-})
-
-const filteredGroups = computed(() => {
-  const groupIds = new Set(filteredEndpoints.value.map(ep => ep.groupId))
+const groups = computed(() => {
+  const groupIds = new Set(endpoints.value.map(ep => ep.groupId))
   return (configStore.config?.endpointGroups || []).filter(g => groupIds.has(g.id))
 })
 
 const knownGroupIds = computed(() => new Set((configStore.config?.endpointGroups ?? []).map(g => g.id)))
 
 const ungroupedEndpoints = computed(() =>
-  filteredEndpoints.value.filter(ep => !knownGroupIds.value.has(ep.groupId))
+  endpoints.value.filter(ep => !knownGroupIds.value.has(ep.groupId))
 )
 
 function getEndpointsByGroup(groupId: string) {
-  return filteredEndpoints.value.filter(ep => ep.groupId === groupId)
+  return endpoints.value.filter(ep => ep.groupId === groupId)
 }
 
 function toggleGroup(groupId: string) {
@@ -233,19 +197,11 @@ function selectVariable(index: number) {
   font-size: 13px;
 }
 
-.search-input {
+.endpoint-divider {
   width: 100%;
-  margin-bottom: 8px;
-}
-
-.method-filter {
-  width: 100%;
-  margin-bottom: 12px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  border: 1px solid var(--border-color);
-  background: var(--input-bg);
-  color: var(--text-primary);
+  margin: 0 0 12px;
+  border: 0;
+  border-top: 1px solid var(--border-color);
 }
 
 .groups {
@@ -322,7 +278,7 @@ function selectVariable(index: number) {
   cursor: not-allowed;
 }
 
-.empty-search {
+.empty-endpoints {
   margin: 16px 8px;
   color: var(--text-secondary);
   font-size: 13px;

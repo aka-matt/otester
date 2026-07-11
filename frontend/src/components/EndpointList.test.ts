@@ -84,6 +84,16 @@ describe('EndpointList', () => {
     expect(wrapper.findAll('[data-testid="variable-option"]')[2].text()).toBe('fallback')
   })
 
+  it('renders every endpoint without search or method filtering controls', () => {
+    expect(wrapper.find('input[placeholder="Search endpoints..."]').exists()).toBe(false)
+    expect(wrapper.findAll('select').some(select => select.text().includes('All Methods'))).toBe(false)
+    expect(wrapper.find('[data-testid="endpoint-divider"]').element.tagName).toBe('HR')
+
+    for (const fixtureEndpoint of fixtureConfig.endpoints) {
+      expect(wrapper.text()).toContain(fixtureEndpoint.name)
+    }
+  })
+
   it('renders configured groups as differently accented endpoint cards', () => {
     const cards = wrapper.findAll('[data-testid="endpoint-group-card"]')
     expect(cards).toHaveLength(2)
