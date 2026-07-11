@@ -103,6 +103,8 @@ import { useConfigStore } from '../stores/config'
 import { useResponseStore } from '../stores/response'
 import { useOAuthStore } from '../stores/oauth'
 import KeyValueEditor from './KeyValueEditor.vue'
+import { SendRequest, CancelRequest, GetTokenStatus } from '../../wailsjs/go/app/App'
+import { model } from '../../wailsjs/go/models'
 
 const requestStore = useRequestStore()
 const configStore = useConfigStore()
@@ -162,7 +164,7 @@ async function sendRequest() {
   if (sending.value) {
     // Cancel
     if (requestStore.requestId) {
-      await window.go?.app.CancelRequest(requestStore.requestId)
+      await CancelRequest(requestStore.requestId)
     }
     requestStore.sending = false
     return
@@ -175,7 +177,7 @@ async function sendRequest() {
 
   try {
     console.log('[DEBUG] calling SendRequest', { requestId, url: url.value })
-    const result = await window.go?.app.SendRequest({
+    const result = await SendRequest(model.RequestInput.createFrom({
       requestId,
       endpointId: configStore.selectedEndpointId || '',
       method: method.value,
@@ -187,7 +189,7 @@ async function sendRequest() {
       timeoutSeconds: requestStore.timeoutSeconds,
       useOAuth: useOAuth.value,
       oauthProfileId: oauthProfileId.value,
-    })
+    }))
     console.log('[DEBUG] SendRequest result', result)
 
     if (result) {
@@ -195,9 +197,9 @@ async function sendRequest() {
     }
 
     if (useOAuth.value && oauthProfileId.value) {
-      const status = await window.go?.app.GetTokenStatus(oauthProfileId.value, null)
+      const status = await GetTokenStatus(oauthProfileId.value, null as any)
       if (status) {
-        oauthStore.updateStatus(oauthProfileId.value, status)
+        oauthStore.updateStatus(oauthProfileId.value, status as any)
       }
     }
   } catch (e) {

@@ -121,6 +121,32 @@ func (a *App) ClearTokenCache() {
 }
 
 func (a *App) GetTokenStatus(profileID string, profile *config.OAuthProfile) (*oauth.TokenStatus, error) {
+	if profile == nil {
+		cfg, err := a.loadConfigFromPath(a.activeConfigPath)
+		if err != nil {
+			return nil, err
+		}
+		for i := range cfg.OAuthProfiles {
+			if cfg.OAuthProfiles[i].ID == profileID {
+				view := cfg.OAuthProfiles[i]
+				profile = &config.OAuthProfile{
+					ID:                         view.ID,
+					Name:                       view.Name,
+					Type:                       view.Type,
+					OrgIDUUID:                  view.OrgIDUUID,
+					ClientID:                   view.ClientID,
+					ClientSecret:               view.ClientSecretMasked,
+					Scope:                      view.Scope,
+					TokenURL:                   view.TokenURL,
+					RefreshBeforeExpirySeconds: view.RefreshBeforeExpirySeconds,
+				}
+				break
+			}
+		}
+		if profile == nil {
+			return nil, fmt.Errorf("oauth profile %q not found in config", profileID)
+		}
+	}
 	return a.oauth.GetTokenStatus(profileID, profile)
 }
 

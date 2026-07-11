@@ -1,22 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { ConfigView, RequestInput, ResponseOutput, TokenStatus } from '../types'
+import type { ConfigView } from '../types'
+import { LoadConfig } from '../../wailsjs/go/app/App'
 
 declare global {
   interface Window {
     go?: {
       app: {
-        LoadConfig: () => Promise<ConfigView>
-        ReloadConfig: () => Promise<ConfigView>
-        ValidateConfig: () => Promise<{ valid: boolean; errors: string[]; warnings: string[] }>
-        GetAppInfo: () => Promise<{ version: string; name: string }>
-        SendRequest: (input: RequestInput) => Promise<ResponseOutput>
-        CancelRequest: (requestId: string) => Promise<void>
-        GetTokenStatus: (profileId: string, profile: any) => Promise<TokenStatus>
-        ClearTokenCache: () => Promise<void>
-        OpenConfigDirectory: () => Promise<void>
-        OpenConfigFile: () => Promise<ConfigView | null>
-        OpenLogDirectory: () => Promise<void>
+        App: {
+          LoadConfig: () => Promise<ConfigView>
+        }
       }
     }
   }
@@ -63,8 +56,8 @@ export const useConfigStore = defineStore('config', () => {
     loading.value = true
     error.value = null
     try {
-      const nextConfig = await window.go?.app.LoadConfig() ?? null
-      if (nextConfig) setConfig(nextConfig)
+      const nextConfig = await LoadConfig() ?? null
+      if (nextConfig) setConfig(nextConfig as unknown as ConfigView)
     } catch (e) {
       error.value = String(e)
     } finally {

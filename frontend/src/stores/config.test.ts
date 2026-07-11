@@ -1,7 +1,15 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { useConfigStore } from './config'
 import type { ConfigView } from '../types'
+
+const { loadConfig } = vi.hoisted(() => ({
+  loadConfig: vi.fn<[], Promise<ConfigView | null>>(),
+}))
+
+vi.mock('../../wailsjs/go/app/App', () => ({
+  LoadConfig: loadConfig,
+}))
 
 const fixture = (): ConfigView => ({
   app: {} as ConfigView['app'],
@@ -12,7 +20,7 @@ const fixture = (): ConfigView => ({
 })
 
 describe('config variable selection', () => {
-  beforeEach(() => { setActivePinia(createPinia()) })
+  beforeEach(() => { setActivePinia(createPinia()); vi.clearAllMocks() })
 
   it('defaults to the first variable and substitutes it', () => {
     const store = useConfigStore(); store.config = fixture(); store.ensureSelectedVariable()
@@ -34,14 +42,11 @@ describe('config variable selection', () => {
 
   it('retains the selected variable when reload reorders variables', async () => {
     const store = useConfigStore(); store.config = fixture(); store.selectVariable(1)
-    window.go = {
-      app: {
-        LoadConfig: async () => ({ ...fixture(), variables: [fixture().variables[1], fixture().variables[0]] }),
-      },
-    } as Window['go']
+    loadConfig.mockResolvedValue({ ...fixture(), variables: [fixture().variables[1], fixture().variables[0]] })
 
     await store.loadConfig()
 
+    expect(loadConfig).toHaveBeenCalledOnce()
     expect(store.selectedVariableIndex).toBe(0)
     expect(store.selectedVariable?.environment).toBe('production')
   })

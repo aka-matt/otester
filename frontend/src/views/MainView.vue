@@ -45,7 +45,13 @@ import ThemeSwitcher from '../components/ThemeSwitcher.vue'
 import StatusBar from '../components/StatusBar.vue'
 import { useConfigStore } from '../stores/config'
 import { useResponseStore } from '../stores/response'
-import { OpenConfigFile } from '../../wailsjs/go/app/App'
+import {
+  OpenConfigFile,
+  OpenLogDirectory,
+  ValidateConfig,
+  ClearTokenCache,
+  GetAppInfo,
+} from '../../wailsjs/go/app/App'
 import type { ConfigView } from '../types'
 
 const configStore = useConfigStore()
@@ -93,10 +99,10 @@ async function handleMenuSelect(key: string) {
       }
       break
     case 'open-log-dir':
-      await window.go?.app.OpenLogDirectory()
+      await OpenLogDirectory()
       break
     case 'validate-config':
-      const result = await window.go?.app.ValidateConfig()
+      const result = await ValidateConfig()
       if (result?.valid) {
         message.success('Config is valid')
       } else {
@@ -104,12 +110,12 @@ async function handleMenuSelect(key: string) {
       }
       break
     case 'clear-tokens':
-      await window.go?.app.ClearTokenCache()
+      await ClearTokenCache()
       message.success('Token cache cleared')
       break
     case 'about':
-      const info = await window.go?.app.GetAppInfo()
-      message.info(`${info?.name || 'otester'} v${info?.version || '1.0.0'}`)
+      const info = await GetAppInfo()
+      message.info(`${info?.Name || 'otester'} v${info?.Version || '1.0.0'}`)
       break
   }
 }
