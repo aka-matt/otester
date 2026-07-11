@@ -15,9 +15,15 @@ import { onMounted } from 'vue'
 import { NConfigProvider, NMessageProvider, NDialogProvider } from 'naive-ui'
 import MainView from './views/MainView.vue'
 import { useThemeStore } from './stores/theme'
+import { useConfigStore } from './stores/config'
 
 const themeStore = useThemeStore()
-themeStore.init()
+const configStore = useConfigStore()
+
+onMounted(async () => {
+  themeStore.init()
+  await configStore.loadConfig()
+})
 </script>
 
 <style>
