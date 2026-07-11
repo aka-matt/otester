@@ -1,5 +1,20 @@
 <template>
   <div class="endpoint-list">
+    <div class="variable-selector" aria-label="Configuration variable">
+      <button
+        v-for="(variable, index) in configStore.config?.variables ?? []"
+        :key="`${variable.id}-${variable.environment}`"
+        type="button"
+        class="variable-option"
+        :class="{ selected: configStore.selectedVariableIndex === index }"
+        :aria-pressed="configStore.selectedVariableIndex === index"
+        data-testid="variable-option"
+        @click="selectVariable(index)"
+      >
+        {{ variable.environment || variable.id }} ({{ variable.id }})
+      </button>
+    </div>
+
     <div class="search-box">
       <input
         v-model="searchQuery"
@@ -21,22 +36,26 @@
     </div>
 
     <div class="groups">
-      <div
+      <section
         v-for="group in filteredGroups"
         :key="group.id"
-        class="group"
+        class="group endpoint-group-card"
+        :style="{ '--group-accent': groupAccent(group.id) }"
+        data-testid="endpoint-group-card"
       >
-        <div class="group-header" @click="toggleGroup(group.id)">
+        <button type="button" class="group-header" @click="toggleGroup(group.id)">
           <span class="group-name">{{ group.name }}</span>
           <span class="group-toggle">{{ collapsedGroups[group.id] ? '+' : '-' }}</span>
-        </div>
+        </button>
 
         <div v-if="!collapsedGroups[group.id]" class="endpoints">
-          <div
+          <button
             v-for="endpoint in getEndpointsByGroup(group.id)"
             :key="endpoint.id"
+            type="button"
             class="endpoint-item"
             :class="{ selected: selectedEndpointId === endpoint.id, disabled: !endpoint.enabled }"
+            :disabled="!endpoint.enabled"
             @click="selectEndpoint(endpoint)"
           >
             <span class="method-badge" :class="endpoint.method.toLowerCase()">
@@ -44,29 +63,38 @@
             </span>
             <span class="endpoint-name">{{ endpoint.name }}</span>
             <span v-if="endpoint.hasOAuth" class="oauth-icon">🔒</span>
-          </div>
+          </button>
         </div>
-      </div>
+      </section>
 
-      <div v-if="ungroupedEndpoints.length > 0" class="group">
+      <section
+        v-if="ungroupedEndpoints.length > 0"
+        class="group endpoint-group-card"
+        :style="{ '--group-accent': 'var(--border-color)' }"
+        data-testid="ungrouped-card"
+      >
         <div class="group-header">
           <span class="group-name">Ungrouped</span>
         </div>
         <div class="endpoints">
-          <div
+          <button
             v-for="endpoint in ungroupedEndpoints"
             :key="endpoint.id"
+            type="button"
             class="endpoint-item"
             :class="{ selected: selectedEndpointId === endpoint.id, disabled: !endpoint.enabled }"
+            :disabled="!endpoint.enabled"
             @click="selectEndpoint(endpoint)"
           >
             <span class="method-badge" :class="endpoint.method.toLowerCase()">
               {{ endpoint.method }}
             </span>
             <span class="endpoint-name">{{ endpoint.name }}</span>
-          </div>
+          </button>
         </div>
-      </div>
+      </section>
+
+      <p v-if="filteredEndpoints.length === 0" class="empty-search">No endpoints match your search.</p>
     </div>
   </div>
 </template>
@@ -85,6 +113,7 @@ const responseStore = useResponseStore()
 const searchQuery = ref('')
 const methodFilter = ref('')
 const collapsedGroups = ref<Record<string, boolean>>({})
+const groupPalette = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4']
 
 const selectedEndpointId = computed(() => configStore.selectedEndpointId)
 
@@ -111,8 +140,10 @@ const filteredGroups = computed(() => {
   return (configStore.config?.endpointGroups || []).filter(g => groupIds.has(g.id))
 })
 
+const knownGroupIds = computed(() => new Set((configStore.config?.endpointGroups ?? []).map(g => g.id)))
+
 const ungroupedEndpoints = computed(() =>
-  filteredEndpoints.value.filter(ep => !ep.groupId)
+  filteredEndpoints.value.filter(ep => !knownGroupIds.value.has(ep.groupId))
 )
 
 function getEndpointsByGroup(groupId: string) {
@@ -123,11 +154,25 @@ function toggleGroup(groupId: string) {
   collapsedGroups.value[groupId] = !collapsedGroups.value[groupId]
 }
 
+function groupAccent(groupId: string) {
+  const index = (configStore.config?.endpointGroups ?? []).findIndex(g => g.id === groupId)
+  return groupPalette[index % groupPalette.length]
+}
+
+function loadEndpoint(endpoint: EndpointView) {
+  requestStore.loadFromEndpoint({ ...endpoint, url: configStore.substituteVariables(endpoint.url) })
+}
+
 function selectEndpoint(endpoint: EndpointView) {
   if (!endpoint.enabled) return
   configStore.selectEndpoint(endpoint.id)
-  requestStore.loadFromEndpoint(endpoint)
+  loadEndpoint(endpoint)
   responseStore.clear()
+}
+
+function selectVariable(index: number) {
+  configStore.selectVariable(index)
+  if (configStore.selectedEndpoint) loadEndpoint(configStore.selectedEndpoint)
 }
 </script>
 
@@ -137,6 +182,45 @@ function selectEndpoint(endpoint: EndpointView) {
   flex-direction: column;
   height: 100%;
   padding: 12px;
+}
+
+.variable-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.variable-option {
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 5px 8px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.variable-option:hover:not(:disabled) {
+  border-color: var(--accent-color);
+}
+
+.variable-option.selected {
+  background: var(--accent-color);
+  border-color: var(--accent-color);
+  color: white;
+}
+
+.variable-option:focus-visible,
+.group-header:focus-visible,
+.endpoint-item:focus-visible {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+.variable-option:disabled,
+.endpoint-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 .search-input {
@@ -161,16 +245,23 @@ function selectEndpoint(endpoint: EndpointView) {
 
 .group {
   margin-bottom: 8px;
+  border: 1px solid var(--group-accent);
+  border-left-width: 4px;
+  border-radius: 6px;
+  overflow: hidden;
 }
 
 .group-header {
   display: flex;
+  width: 100%;
   justify-content: space-between;
   padding: 6px 8px;
   cursor: pointer;
-  border-radius: 6px;
+  border: 0;
   background: var(--bg-primary);
+  color: var(--text-primary);
   margin-bottom: 4px;
+  text-align: left;
 }
 
 .group-header:hover {
@@ -180,6 +271,7 @@ function selectEndpoint(endpoint: EndpointView) {
 .group-name {
   font-weight: 600;
   font-size: 13px;
+  color: var(--group-accent);
 }
 
 .endpoints {
@@ -188,15 +280,20 @@ function selectEndpoint(endpoint: EndpointView) {
 
 .endpoint-item {
   display: flex;
+  width: 100%;
   align-items: center;
   gap: 8px;
   padding: 8px;
   cursor: pointer;
+  border: 0;
   border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
   transition: background 0.15s;
 }
 
-.endpoint-item:hover {
+.endpoint-item:hover:not(:disabled) {
   background: var(--bg-primary);
 }
 
@@ -213,6 +310,13 @@ function selectEndpoint(endpoint: EndpointView) {
 .endpoint-item.disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.empty-search {
+  margin: 16px 8px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: center;
 }
 
 .method-badge {
