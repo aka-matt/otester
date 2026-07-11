@@ -1,16 +1,17 @@
 package httpclient
 
 import (
+	"crypto/ecdsa"
+	"crypto/ed25519"
+	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
 	"math"
 	"strings"
 	"time"
-
-	"crypto/tls"
 )
 
 // tlsVersionString maps a TLS protocol version constant to its string label.
@@ -124,5 +125,59 @@ func extKeyUsageToStrings(usage []x509.ExtKeyUsage) []string {
 	return out
 }
 
-// base64StdEncode is used by later tasks; declare here so the import is used.
-var _ = base64.StdEncoding.EncodeToString
+// sanToStrings renders every Subject Alternative Name on cert with a type prefix.
+func sanToStrings(cert *x509.Certificate) []string {
+	out := make([]string, 0, len(cert.DNSNames)+len(cert.IPAddresses)+len(cert.EmailAddresses)+len(cert.URIs))
+	for _, d := range cert.DNSNames {
+		out = append(out, "DNS:"+d)
+	}
+	for _, ip := range cert.IPAddresses {
+		out = append(out, "IP:"+ip.String())
+	}
+	for _, e := range cert.EmailAddresses {
+		out = append(out, "email:"+e)
+	}
+	for _, u := range cert.URIs {
+		out = append(out, "URI:"+u.String())
+	}
+	return out
+}
+
+// publicKeyPEM marshals any supported public key as PKIX and PEM-encodes it.
+func publicKeyPEM(pub any) (string, error) {
+	der, err := x509.MarshalPKIXPublicKey(pub)
+	if err != nil {
+		return "", err
+	}
+	block := &pem.Block{Type: "PUBLIC KEY", Bytes: der}
+	return string(pem.EncodeToMemory(block)), nil
+}
+
+// extractKeyAlgorithm returns "RSA", "ECDSA", or "Ed25519" for known key types.
+func extractKeyAlgorithm(pub any) string {
+	switch pub.(type) {
+	case *rsa.PublicKey:
+		return "RSA"
+	case *ecdsa.PublicKey:
+		return "ECDSA"
+	case ed25519.PublicKey:
+		return "Ed25519"
+	default:
+		return "Unknown"
+	}
+}
+
+// extractKeySize returns the bit size of the public key, or 0 for keys
+// where size is not meaningful (Ed25519).
+func extractKeySize(pub any) int {
+	switch k := pub.(type) {
+	case *rsa.PublicKey:
+		return k.N.BitLen()
+	case *ecdsa.PublicKey:
+		return k.Curve.Params().BitSize
+	case ed25519.PublicKey:
+		return 0
+	default:
+		return 0
+	}
+}
