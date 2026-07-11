@@ -8,6 +8,13 @@ import { useResponseStore } from '../stores/response'
 import type { ConfigView } from '../types'
 
 const message = { error: vi.fn(), success: vi.fn(), info: vi.fn() }
+const { openConfigFile } = vi.hoisted(() => ({
+  openConfigFile: vi.fn<[], Promise<ConfigView | null>>(),
+}))
+
+vi.mock('../../wailsjs/go/app/App', () => ({
+  OpenConfigFile: openConfigFile,
+}))
 
 vi.mock('naive-ui', () => ({
   NDropdown: {
@@ -29,12 +36,9 @@ const config = (path: string, variableID = 'base_url'): ConfigView => ({
 })
 
 describe('MainView config file menu', () => {
-  const openConfigFile = vi.fn<[], Promise<ConfigView | null>>()
-
   beforeEach(() => {
     setActivePinia(createPinia())
     vi.clearAllMocks()
-    window.go = { app: { OpenConfigFile: openConfigFile } } as unknown as Window['go']
   })
 
   async function selectFileMenuItem(key: string) {

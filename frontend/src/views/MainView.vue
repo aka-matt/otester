@@ -45,6 +45,8 @@ import ThemeSwitcher from '../components/ThemeSwitcher.vue'
 import StatusBar from '../components/StatusBar.vue'
 import { useConfigStore } from '../stores/config'
 import { useResponseStore } from '../stores/response'
+import { OpenConfigFile } from '../../wailsjs/go/app/App'
+import type { ConfigView } from '../types'
 
 const configStore = useConfigStore()
 const responseStore = useResponseStore()
@@ -81,9 +83,9 @@ async function handleMenuSelect(key: string) {
       break
     case 'open-config-file':
       try {
-        const config = await window.go?.app.OpenConfigFile()
+        const config = await OpenConfigFile()
         if (config) {
-          configStore.setConfig(config)
+          configStore.setConfig(config as unknown as ConfigView)
           responseStore.clear()
         }
       } catch (error) {
