@@ -37,6 +37,7 @@ export interface ResponseOutput {
   tokenFromCache: boolean
   errorCode: string
   errorMessage: string
+  tls?: TLSInfo
 }
 
 export interface AppConfig {
