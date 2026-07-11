@@ -2,6 +2,7 @@ package model
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 )
@@ -159,5 +160,59 @@ func TestTokenStatusOptionalExpiresAt(t *testing.T) {
 	}
 	if result.ExpiresAt != nil {
 		t.Errorf("TokenStatus ExpiresAt should be nil when not set")
+	}
+}
+
+func TestTLSInfoJSON(t *testing.T) {
+	info := TLSInfo{
+		Status:                "ok",
+		TargetHost:            "example.com:443",
+		AttemptedServerName:   "example.com",
+		Connection: &TLSConnectionView{
+			Version:          "TLS 1.3",
+			CipherSuite:      "TLS_AES_256_GCM_SHA384",
+			CipherSuiteName:  "AES-256-GCM",
+			NegotiatedProtocol: "h2",
+			ServerName:       "example.com",
+			Resumed:          false,
+			SCTs:             []string{"AQID"},
+			OCSPStapled:      true,
+			PeerCertificates: 2,
+		},
+		Certificates: []CertificateView{
+			{
+				Position: "leaf",
+				Subject:  "CN=example.com",
+				Issuer:   "CN=R3, O=Let's Encrypt",
+			},
+		},
+	}
+	data, err := json.Marshal(info)
+	if err != nil {
+		t.Fatalf("marshal TLSInfo: %v", err)
+	}
+	if !strings.Contains(string(data), `"status":"ok"`) {
+		t.Errorf("expected status field in JSON, got %s", data)
+	}
+	if !strings.Contains(string(data), `"targetHost":"example.com:443"`) {
+		t.Errorf("expected targetHost field in JSON, got %s", data)
+	}
+	var back TLSInfo
+	if err := json.Unmarshal(data, &back); err != nil {
+		t.Fatalf("unmarshal TLSInfo: %v", err)
+	}
+	if back.Status != "ok" || back.TargetHost != "example.com:443" {
+		t.Errorf("roundtrip mismatch: %+v", back)
+	}
+}
+
+func TestResponseOutput_TLS_Omitempty(t *testing.T) {
+	out := ResponseOutput{RequestID: "r1"}
+	data, err := json.Marshal(out)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(data), `"tls"`) {
+		t.Errorf("expected no tls field when TLS is nil, got %s", data)
 	}
 }

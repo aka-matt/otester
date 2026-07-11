@@ -63,6 +63,7 @@ type ResponseOutput struct {
 	ContentType   string            `json:"contentType"`
 	UsedOAuth     bool              `json:"usedOAuth"`
 	TokenFromCache bool             `json:"tokenFromCache"`
+	TLS           *TLSInfo          `json:"tls,omitempty"`
 	ErrorCode     string            `json:"errorCode"`
 	ErrorMessage  string            `json:"errorMessage"`
 }
@@ -72,4 +73,56 @@ type TokenStatus struct {
 	HasToken  bool      `json:"hasToken"`
 	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
 	FromCache bool      `json:"fromCache"`
+}
+
+type TLSInfo struct {
+	Status              string               `json:"status"`
+	Error               string               `json:"error,omitempty"`
+	TargetHost          string               `json:"targetHost"`
+	AttemptedServerName string               `json:"attemptedServerName,omitempty"`
+	Connection          *TLSConnectionView   `json:"connection,omitempty"`
+	Certificates        []CertificateView    `json:"certificates"`
+}
+
+type TLSConnectionView struct {
+	Version            string   `json:"version"`
+	CipherSuite        string   `json:"cipherSuite"`
+	CipherSuiteName    string   `json:"cipherSuiteName"`
+	NegotiatedProtocol string   `json:"negotiatedProtocol,omitempty"`
+	ServerName         string   `json:"serverName"`
+	Resumed            bool     `json:"resumed"`
+	SCTs               []string `json:"scts,omitempty"`
+	OCSPStapled        bool     `json:"ocspStapled"`
+	PeerCertificates   int      `json:"peerCertificates"`
+}
+
+type CertificateView struct {
+	Position              string   `json:"position"`
+	Subject               string   `json:"subject"`
+	Issuer                string   `json:"issuer"`
+	SerialNumber          string   `json:"serialNumber"`
+	Version               int      `json:"version"`
+	SignatureAlgorithm    string   `json:"signatureAlgorithm"`
+	NotBefore             string   `json:"notBefore"`
+	NotAfter              string   `json:"notAfter"`
+	IsExpired             bool     `json:"isExpired"`
+	IsNotYetValid         bool     `json:"isNotYetValid"`
+	DaysToExpiry          int      `json:"daysToExpiry"`
+	SubjectKeyId          string   `json:"subjectKeyId"`
+	AuthorityKeyId        string   `json:"authorityKeyId"`
+	SANs                  []string `json:"sans"`
+	KeyAlgorithm          string   `json:"keyAlgorithm"`
+	KeySize               int      `json:"keySize"`
+	PublicKeyPEM          string   `json:"publicKeyPem"`
+	FingerprintSHA1       string   `json:"fingerprintSha1"`
+	FingerprintSHA256     string   `json:"fingerprintSha256"`
+	IsCA                  bool     `json:"isCa"`
+	MaxPathLength         int      `json:"maxPathLength"`
+	KeyUsage              []string `json:"keyUsage"`
+	ExtendedKeyUsage      []string `json:"extendedKeyUsage"`
+	CRLDistributionPoints []string `json:"crlDistributionPoints,omitempty"`
+	Policies              []string `json:"policies,omitempty"`
+	RawDER                string   `json:"rawDer"`
+	PEM                   string   `json:"pem"`
+	SignatureBytes        string   `json:"signatureBytes"`
 }
