@@ -1,6 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
-import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import CertificateViewer from './CertificateViewer.vue'
 import type { CertificateView, TLSConnectionView, TLSInfo } from '../types'
