@@ -41,7 +41,7 @@ const fixtureConfig: ConfigView = {
   endpoints: [
     endpoint({ id: 'users', name: 'Users endpoint', groupId: 'users', url: '{{api}}/users' }),
     endpoint({ id: 'orders', name: 'Orders endpoint', groupId: 'orders' }),
-    endpoint({ id: 'orphan', name: 'Orphan endpoint', groupId: 'missing' }),
+    endpoint({ id: 'orphan', name: 'Orphan endpoint', groupId: 'missing', hasOAuth: true }),
   ],
   configPath: '/tmp/config.json',
 }
@@ -80,5 +80,9 @@ describe('EndpointList', () => {
 
   it('puts unknown-group endpoints in the ungrouped card', () => {
     expect(wrapper.get('[data-testid="ungrouped-card"]').text()).toContain('Orphan endpoint')
+  })
+
+  it('renders OAuth endpoint locks in the ungrouped card', () => {
+    expect(wrapper.get('[data-testid="ungrouped-card"]').text()).toContain('🔒')
   })
 })

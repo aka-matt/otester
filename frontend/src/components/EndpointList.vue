@@ -90,6 +90,7 @@
               {{ endpoint.method }}
             </span>
             <span class="endpoint-name">{{ endpoint.name }}</span>
+            <span v-if="endpoint.hasOAuth" class="oauth-icon">🔒</span>
           </button>
         </div>
       </section>
