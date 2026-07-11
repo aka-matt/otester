@@ -31,4 +31,29 @@ describe('config variable selection', () => {
     store.config = { ...fixture(), variables: [fixture().variables[0]] }; store.ensureSelectedVariable()
     expect(store.selectedVariableIndex).toBe(0)
   })
+
+  it('retains the selected variable when reload reorders variables', async () => {
+    const store = useConfigStore(); store.config = fixture(); store.selectVariable(1)
+    window.go = {
+      app: {
+        LoadConfig: async () => ({ ...fixture(), variables: [fixture().variables[1], fixture().variables[0]] }),
+      },
+    } as Window['go']
+
+    await store.loadConfig()
+
+    expect(store.selectedVariableIndex).toBe(0)
+    expect(store.selectedVariable?.environment).toBe('production')
+  })
+
+  it('substitutes a selected variable literally', () => {
+    const store = useConfigStore()
+    store.config = {
+      ...fixture(),
+      variables: [{ id: 'api.url', base_url: 'https://test.example/$&/api', environment: 'test' }],
+    }
+    store.selectVariable(0)
+
+    expect(store.substituteVariables('{{api.url}} {{apiXurl}}')).toBe('https://test.example/$&/api {{apiXurl}}')
+  })
 })

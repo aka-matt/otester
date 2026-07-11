@@ -36,10 +36,15 @@ export const useConfigStore = defineStore('config', () => {
   const selectedVariable = computed(() => selectedVariableIndex.value === null
     ? null : config.value?.variables[selectedVariableIndex.value] ?? null)
 
-  function ensureSelectedVariable() {
+  function ensureSelectedVariable(previousSelection = selectedVariable.value) {
     const variables = config.value?.variables ?? []
-    const current = selectedVariable.value
-    if (current && variables.some(v => v.id === current.id && v.environment === current.environment)) return
+    const selectedIndex = previousSelection
+      ? variables.findIndex(v => v.id === previousSelection.id && v.environment === previousSelection.environment)
+      : -1
+    if (selectedIndex !== -1) {
+      selectedVariableIndex.value = selectedIndex
+      return
+    }
     selectedVariableIndex.value = variables.length ? 0 : null
   }
 
@@ -51,8 +56,9 @@ export const useConfigStore = defineStore('config', () => {
     loading.value = true
     error.value = null
     try {
+      const previousSelection = selectedVariable.value
       config.value = await window.go?.app.LoadConfig() ?? null
-      ensureSelectedVariable()
+      ensureSelectedVariable(previousSelection)
     } catch (e) {
       error.value = String(e)
     } finally {
@@ -70,7 +76,9 @@ export const useConfigStore = defineStore('config', () => {
 
   function substituteVariables(text: string): string {
     const variable = selectedVariable.value
-    return variable ? text.replace(new RegExp(`{{${variable.id}}}`, 'g'), variable.base_url) : text
+    if (!variable) return text
+    const escapedID = variable.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    return text.replace(new RegExp(`{{${escapedID}}}`, 'g'), () => variable.base_url)
   }
 
   return {
