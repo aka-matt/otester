@@ -57,6 +57,10 @@
             </table>
           </div>
         </n-tab-pane>
+
+        <n-tab-pane name="certificate" tab="Certificate" display-directive="show">
+          <CertificateViewer :info="response.tls ?? null" />
+        </n-tab-pane>
       </n-tabs>
 
       <div v-if="response.errorCode" class="error-panel">
@@ -71,6 +75,7 @@
 import { computed } from 'vue'
 import { NTabs, NTabPane } from 'naive-ui'
 import { useResponseStore } from '../stores/response'
+import CertificateViewer from './CertificateViewer.vue'
 
 const responseStore = useResponseStore()
 const response = computed(() => responseStore.response)
