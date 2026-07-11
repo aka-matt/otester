@@ -116,8 +116,11 @@ const method = computed({
   set: (v) => { requestStore.method = v }
 })
 
+// The URL bar shows the live-substituted URL (selected variable applied).
+// The underlying requestStore.url keeps the raw template so variable
+// changes propagate automatically and the user can still type their own URL.
 const url = computed({
-  get: () => requestStore.url,
+  get: () => configStore.substituteVariables(requestStore.url),
   set: (v) => { requestStore.url = v }
 })
 
@@ -181,7 +184,7 @@ async function sendRequest() {
       requestId,
       endpointId: configStore.selectedEndpointId || '',
       method: method.value,
-      url: configStore.substituteVariables(url.value),
+      url: configStore.substituteVariables(requestStore.url),
       headers: headers.value.filter(h => h.enabled),
       queryParams: queryParams.value.filter(q => q.enabled),
       bodyType: bodyType.value,

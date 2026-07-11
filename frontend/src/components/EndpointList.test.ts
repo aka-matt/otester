@@ -52,25 +52,117 @@ describe('EndpointList', () => {
   let wrapper: VueWrapper
   let configStore: ReturnType<typeof useConfigStore>
   let requestStore: ReturnType<typeof useRequestStore>
+  let pinia: ReturnType<typeof createPinia>
+
+  function mountWithConfig(config: ConfigView) {
+    configStore.config = config
+    configStore.ensureSelectedVariable()
+    wrapper = mount(EndpointList, { global: { plugins: [pinia] } })
+  }
 
   beforeEach(() => {
-    const pinia = createPinia()
+    pinia = createPinia()
     setActivePinia(pinia)
     configStore = useConfigStore()
     requestStore = useRequestStore()
-    configStore.config = fixtureConfig
-    configStore.ensureSelectedVariable()
     vi.spyOn(useResponseStore(), 'clear')
-    wrapper = mount(EndpointList, { global: { plugins: [pinia] } })
   })
 
-  it('selects a variable and reloads the active endpoint URL', async () => {
+  it('selects a variable and lets the URL bar recompute the substituted URL', async () => {
+    mountWithConfig(fixtureConfig)
     configStore.selectEndpoint('users')
+    await wrapper.findAll('.endpoint-item')[0].trigger('click')
 
     await wrapper.findAll('[data-testid="variable-option"]')[1].trigger('click')
 
     expect(configStore.selectedVariable?.environment).toBe('production')
-    expect(requestStore.url).toBe('https://prod.example/users')
+    // The request store keeps the raw template so any later variable change
+    // propagates through the URL bar's computed without reloading the endpoint.
+    expect(requestStore.url).toBe('{{api}}/users')
+    expect(configStore.substituteVariables(requestStore.url)).toBe('https://prod.example/users')
+  })
+
+  it('stores the raw template on click so the URL bar can show the substituted URL', async () => {
+    // Regression: clicking an endpoint used to write the substituted URL into
+    // requestStore.url, which meant Send could send "{{base_url}}/..." if no
+    // variable was selected. The URL bar now always displays the substituted
+    // form, while requestStore.url keeps the template.
+    const somethingEndpoint = endpoint({
+      id: 'something',
+      name: 'Get something',
+      url: '{{base_url}}/api/v2/something/one',
+    })
+    configStore.config = {
+      ...fixtureConfig,
+      variables: [{ id: 'base_url', base_url: 'https://sample.co', environment: 'test' }],
+      endpoints: [somethingEndpoint],
+    }
+    configStore.ensureSelectedVariable()
+
+    await wrapper.findAll('.endpoint-item')[0].trigger('click')
+
+    expect(requestStore.url).toBe('{{base_url}}/api/v2/something/one')
+    expect(configStore.substituteVariables(requestStore.url)).toBe('https://sample.co/api/v2/something/one')
+  })
+
+  it('regenerates the URL bar when a different variable is picked', async () => {
+    configStore.config = {
+      ...fixtureConfig,
+      variables: [
+        { id: 'base_url', base_url: 'https://sample.co', environment: 'test' },
+        { id: 'base_url', base_url: 'https://staging.pokeapi.co', environment: 'staging' },
+      ],
+      endpoints: [
+        endpoint({ id: 'something', name: 'Get something', url: '{{base_url}}/api/v2/something/one' }),
+      ],
+    }
+    configStore.ensureSelectedVariable()
+
+    await wrapper.findAll('.endpoint-item')[0].trigger('click')
+    expect(configStore.substituteVariables(requestStore.url)).toBe('https://sample.co/api/v2/something/one')
+
+    await wrapper.findAll('[data-testid="variable-option"]')[1].trigger('click')
+
+    expect(configStore.selectedVariable?.environment).toBe('staging')
+    expect(configStore.substituteVariables(requestStore.url)).toBe('https://staging.pokeapi.co/api/v2/something/one')
+  })
+
+  it('substitutes {{base_url}} even when the variable id is different', async () => {
+    // Real-world configs (including the sample) name the variable id something
+    // like "host" or "dev" but use {{base_url}} in endpoint URLs. The
+    // substitution helper must handle that as an alias for the selected
+    // variable's base_url field.
+    configStore.config = {
+      ...fixtureConfig,
+      variables: [{ id: 'host', base_url: 'https://sample.co', environment: 'test' }],
+      endpoints: [
+        endpoint({ id: 'something', name: 'Get something', url: '{{base_url}}/api/v2/something/one' }),
+      ],
+    }
+    configStore.ensureSelectedVariable()
+
+    await wrapper.findAll('.endpoint-item')[0].trigger('click')
+
+    expect(configStore.substituteVariables(requestStore.url)).toBe('https://sample.co/api/v2/something/one')
+  })
+
+  it('auto-selects the first variable when an endpoint is clicked without one selected', async () => {
+    // If the user somehow never had a variable selected (e.g. config reloaded
+    // to a state where selectedVariableIndex ended up null), clicking an
+    // endpoint must still produce a substituted URL — not the raw template.
+    configStore.config = {
+      ...fixtureConfig,
+      variables: [{ id: 'base_url', base_url: 'https://sample.co', environment: 'test' }],
+      endpoints: [
+        endpoint({ id: 'something', name: 'Get something', url: '{{base_url}}/api/v2/something/one' }),
+      ],
+    }
+    configStore.selectedVariableIndex = null
+
+    await wrapper.findAll('.endpoint-item')[0].trigger('click')
+
+    expect(configStore.selectedVariableIndex).toBe(0)
+    expect(configStore.substituteVariables(requestStore.url)).toBe('https://sample.co/api/v2/something/one')
   })
 
   it('renders an empty-state message when no variables are configured', async () => {

@@ -127,8 +127,14 @@ function groupAccent(groupId: string) {
   return groupPalette[index % groupPalette.length]
 }
 
+// Store the raw endpoint URL (with {{...}} placeholders) in the request store.
+// The RequestEditor's URL input shows the substituted form via a computed,
+// so the input updates automatically whenever the user picks a different variable.
 function loadEndpoint(endpoint: EndpointView) {
-  requestStore.loadFromEndpoint({ ...endpoint, url: configStore.substituteVariables(endpoint.url) })
+  // Make sure a variable is selected so substituteVariables can resolve
+  // {{varId}} / {{base_url}} / {{environment}} placeholders in the URL bar.
+  configStore.ensureSelectedVariable()
+  requestStore.loadFromEndpoint(endpoint)
 }
 
 function selectEndpoint(endpoint: EndpointView) {
@@ -140,7 +146,8 @@ function selectEndpoint(endpoint: EndpointView) {
 
 function selectVariable(index: number) {
   configStore.selectVariable(index)
-  if (configStore.selectedEndpoint) loadEndpoint(configStore.selectedEndpoint)
+  // The URL bar's computed reactively re-substitutes requestStore.url with the
+  // newly selected variable, so no manual reload of the active endpoint is needed.
 }
 </script>
 

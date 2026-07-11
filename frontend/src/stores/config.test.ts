@@ -61,4 +61,33 @@ describe('config variable selection', () => {
 
     expect(store.substituteVariables('{{api.url}} {{apiXurl}}')).toBe('https://test.example/$&/api {{apiXurl}}')
   })
+
+  it('treats {{base_url}} as an alias for the selected variable', () => {
+    // Real configs (e.g. the bundled sample) often pair a variable whose id is
+    // "host" or "dev" with a URL like {{base_url}}/endpoint. The substitution
+    // must resolve {{base_url}} to the currently selected variable's base_url.
+    const store = useConfigStore()
+    store.config = {
+      ...fixture(),
+      variables: [
+        { id: 'host', base_url: 'https://dev.example', environment: 'dev' },
+        { id: 'host', base_url: 'https://prod.example', environment: 'prod' },
+      ],
+    }
+    store.selectVariable(0)
+    expect(store.substituteVariables('{{base_url}}/users')).toBe('https://dev.example/users')
+
+    store.selectVariable(1)
+    expect(store.substituteVariables('{{base_url}}/users')).toBe('https://prod.example/users')
+  })
+
+  it('substitutes {{environment}} with the selected variable environment', () => {
+    const store = useConfigStore()
+    store.config = {
+      ...fixture(),
+      variables: [{ id: 'host', base_url: 'https://dev.example', environment: 'staging' }],
+    }
+    store.selectVariable(0)
+    expect(store.substituteVariables('{{base_url}}/endpoint-{{environment}}')).toBe('https://dev.example/endpoint-staging')
+  })
 })

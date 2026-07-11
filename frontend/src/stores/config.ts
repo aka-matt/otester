@@ -76,8 +76,18 @@ export const useConfigStore = defineStore('config', () => {
   function substituteVariables(text: string): string {
     const variable = selectedVariable.value
     if (!variable) return text
+    let result = text
+    // {{varId}} — substitute the selected variable's id with its base_url
     const escapedID = variable.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-    return text.replace(new RegExp(`{{${escapedID}}}`, 'g'), () => variable.base_url)
+    result = result.replace(new RegExp(`{{${escapedID}}}`, 'g'), () => variable.base_url)
+    // {{base_url}} — common alias that always resolves to the selected variable's base_url
+    // (the sample config and many real configs use this even when the variable id differs)
+    result = result.replace(/{{base_url}}/g, () => variable.base_url)
+    // {{environment}} — likewise, expose the selected variable's environment
+    if (variable.environment) {
+      result = result.replace(/{{environment}}/g, () => variable.environment)
+    }
+    return result
   }
 
   return {
