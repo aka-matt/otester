@@ -1,6 +1,7 @@
 package httpclient
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/rsa"
@@ -11,8 +12,10 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math"
+	"net/http"
 	"strings"
 	"time"
 
@@ -293,4 +296,66 @@ func sha1Of(b []byte) []byte {
 func sha256Of(b []byte) []byte {
 	h := sha256.Sum256(b)
 	return h[:]
+}
+
+// BuildTLSInfo returns the TLSInfo for a successful (or non-TLS) HTTP response.
+// When resp.TLS is nil (plain HTTP), status is "no_tls_attempted".
+func BuildTLSInfo(resp *http.Response, req *http.Request) *model.TLSInfo {
+	host := ""
+	if req != nil && req.URL != nil {
+		host = req.URL.Host
+	}
+	if resp.TLS == nil {
+		return &model.TLSInfo{
+			Status:     "no_tls_attempted",
+			Error:      "URL scheme is not HTTPS",
+			TargetHost: host,
+		}
+	}
+	return &model.TLSInfo{
+		Status:              "ok",
+		TargetHost:          host,
+		AttemptedServerName: resp.TLS.ServerName,
+		Connection:          buildConnectionView(resp.TLS),
+		Certificates:        buildCertificateViews(resp.TLS.PeerCertificates),
+	}
+}
+
+// BuildTLSInfoFromError classifies a transport-level error and produces a TLSInfo
+// reflecting whether TLS was attempted and whether it failed.
+func BuildTLSInfoFromError(req *http.Request, err error) *model.TLSInfo {
+	host := ""
+	sni := ""
+	if req != nil && req.URL != nil {
+		host = req.URL.Host
+		// For https URLs, the "host" portion is what would be sent as SNI.
+		if req.URL.Scheme == "https" {
+			sni = req.URL.Hostname()
+		}
+	}
+
+	status := "no_tls_attempted"
+	msg := ""
+	if err != nil {
+		msg = err.Error()
+	}
+
+	// context cancellations and timeouts are never TLS handshake failures.
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		status = "no_tls_attempted"
+	} else if msg != "" && (strings.Contains(msg, "tls:") || strings.Contains(msg, "x509:")) {
+		status = "handshake_failed"
+	}
+
+	info := &model.TLSInfo{
+		Status:              status,
+		Error:               msg,
+		TargetHost:          host,
+		AttemptedServerName: sni,
+		Certificates:        []model.CertificateView{},
+	}
+	if status == "ok" {
+		info.Error = ""
+	}
+	return info
 }

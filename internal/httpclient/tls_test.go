@@ -1,6 +1,7 @@
 package httpclient
 
 import (
+	"context"
 	"crypto/ecdsa"
 	"crypto/ed25519"
 	"crypto/elliptic"
@@ -8,11 +9,14 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"errors"
+	"io"
 	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 )
@@ -362,5 +366,112 @@ func TestBuildConnectionView_TLS13(t *testing.T) {
 	}
 	if got.PeerCertificates < 1 {
 		t.Errorf("PeerCertificates = %d, expected >= 1", got.PeerCertificates)
+	}
+}
+
+func TestBuildTLSInfo_NonHTTPS(t *testing.T) {
+	resp := &http.Response{
+		StatusCode: 200,
+		Header:     http.Header{},
+		Body:       io.NopCloser(strings.NewReader("")),
+		TLS:        nil,
+	}
+	req, _ := http.NewRequest("GET", "http://example.com/foo", nil)
+	got := BuildTLSInfo(resp, req)
+	if got == nil {
+		t.Fatal("expected non-nil TLSInfo")
+	}
+	if got.Status != "no_tls_attempted" {
+		t.Errorf("Status = %q, want no_tls_attempted", got.Status)
+	}
+	if got.TargetHost != "example.com" {
+		t.Errorf("TargetHost = %q, want example.com", got.TargetHost)
+	}
+	if got.Connection != nil {
+		t.Errorf("Connection should be nil for non-HTTPS, got %+v", got.Connection)
+	}
+	if len(got.Certificates) != 0 {
+		t.Errorf("Certificates should be empty for non-HTTPS, got %d", len(got.Certificates))
+	}
+}
+
+func TestBuildTLSInfo_HTTPS(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+	}))
+	defer server.Close()
+
+	req, _ := http.NewRequest("GET", server.URL+"/foo", nil)
+	resp, err := server.Client().Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	got := BuildTLSInfo(resp, req)
+	if got == nil || got.Status != "ok" {
+		t.Fatalf("expected Status=ok, got %+v", got)
+	}
+	if got.Connection == nil {
+		t.Fatal("expected non-nil Connection")
+	}
+	if len(got.Certificates) < 1 {
+		t.Errorf("expected >= 1 cert, got %d", len(got.Certificates))
+	}
+	if got.Certificates[0].Position != "leaf" {
+		t.Errorf("first cert position = %q, want leaf", got.Certificates[0].Position)
+	}
+}
+
+func TestBuildTLSInfoFromError_TLS(t *testing.T) {
+	req, _ := http.NewRequest("GET", "https://example.com/foo", nil)
+	err := errors.New("tls: handshake failure")
+	got := BuildTLSInfoFromError(req, err)
+	if got.Status != "handshake_failed" {
+		t.Errorf("Status = %q, want handshake_failed", got.Status)
+	}
+	if got.Error != "tls: handshake failure" {
+		t.Errorf("Error = %q, want %q", got.Error, "tls: handshake failure")
+	}
+	if got.AttemptedServerName != "example.com" {
+		t.Errorf("AttemptedServerName = %q, want example.com", got.AttemptedServerName)
+	}
+}
+
+func TestBuildTLSInfoFromError_X509(t *testing.T) {
+	req, _ := http.NewRequest("GET", "https://example.com/foo", nil)
+	err := errors.New("x509: certificate is valid for other.example, not example.com")
+	got := BuildTLSInfoFromError(req, err)
+	if got.Status != "handshake_failed" {
+		t.Errorf("Status = %q, want handshake_failed", got.Status)
+	}
+}
+
+func TestBuildTLSInfoFromError_ConnectionRefused(t *testing.T) {
+	req, _ := http.NewRequest("GET", "https://example.com/foo", nil)
+	err := errors.New("dial tcp 127.0.0.1:1: connect: connection refused")
+	got := BuildTLSInfoFromError(req, err)
+	if got.Status != "no_tls_attempted" {
+		t.Errorf("Status = %q, want no_tls_attempted", got.Status)
+	}
+}
+
+func TestBuildTLSInfoFromError_DNS(t *testing.T) {
+	req, _ := http.NewRequest("GET", "https://nonexistent.invalid/foo", nil)
+	err := errors.New("no such host")
+	got := BuildTLSInfoFromError(req, err)
+	if got.Status != "no_tls_attempted" {
+		t.Errorf("Status = %q, want no_tls_attempted", got.Status)
+	}
+}
+
+func TestBuildTLSInfoFromError_Timeout(t *testing.T) {
+	req, _ := http.NewRequest("GET", "https://example.com/foo", nil)
+	got := BuildTLSInfoFromError(req, context.DeadlineExceeded)
+	if got.Status != "no_tls_attempted" {
+		t.Errorf("Status = %q, want no_tls_attempted", got.Status)
+	}
+	if !strings.Contains(got.Error, "deadline") && !strings.Contains(got.Error, "timeout") {
+		t.Errorf("Error = %q, expected deadline/timeout wording", got.Error)
 	}
 }
