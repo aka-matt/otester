@@ -802,7 +802,7 @@ box-shadow:
       "group_id": "sample-service",
       "enabled": true,
       "method": "GET",
-      "url": "{{base_url}}/sample/api/endpoint",
+      "url": "{{base_url}}/sample/api/endpoint-{environment}",
       "timeout_seconds": 30,
       "auth": {
         "type": "oauth2",

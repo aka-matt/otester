@@ -1,0 +1,446 @@
+# Review package: a37e3e2..b497248
+
+## Commits
+b497248 feat: add variable selector and endpoint group cards
+
+## Files changed
+ frontend/src/components/EndpointList.test.ts |  84 +++++++++++++++++
+ frontend/src/components/EndpointList.vue     | 134 ++++++++++++++++++++++++---
+ 2 files changed, 203 insertions(+), 15 deletions(-)
+
+## Diff
+diff --git a/frontend/src/components/EndpointList.test.ts b/frontend/src/components/EndpointList.test.ts
+new file mode 100644
+index 0000000..66d706f
+--- /dev/null
++++ b/frontend/src/components/EndpointList.test.ts
+@@ -0,0 +1,84 @@
++import { beforeEach, describe, expect, it, vi } from 'vitest'
++import { mount, type VueWrapper } from '@vue/test-utils'
++import { createPinia, setActivePinia } from 'pinia'
++import EndpointList from './EndpointList.vue'
++import { useConfigStore } from '../stores/config'
++import { useRequestStore } from '../stores/request'
++import { useResponseStore } from '../stores/response'
++import type { ConfigView, EndpointView } from '../types'
++
++const endpoint = (overrides: Partial<EndpointView>): EndpointView => ({
++  id: 'endpoint',
++  name: 'Endpoint',
++  description: '',
++  groupId: '',
++  enabled: true,
++  method: 'GET',
++  url: 'https://example.test',
++  timeoutSeconds: 30,
++  auth: { type: 'none', profileId: '', allowAuthorizationHeaderOverride: false },
++  headers: [],
++  queryParams: [],
++  body: { type: 'none', content: '' },
++  hasOAuth: false,
++  ...overrides,
++})
++
++const fixtureConfig: ConfigView = {
++  app: {
++    name: 'test', title: 'Test', defaultTimeoutSeconds: 30,
++    maxResponseBodyBytes: 1024, allowInsecureTLS: false, persistRequestHistory: false,
++  },
++  variables: [
++    { id: 'api', base_url: 'https://staging.example', environment: 'staging' },
++    { id: 'api', base_url: 'https://prod.example', environment: 'production' },
++  ],
++  oauthProfiles: [],
++  endpointGroups: [
++    { id: 'users', name: 'Users' },
++    { id: 'orders', name: 'Orders' },
++  ],
++  endpoints: [
++    endpoint({ id: 'users', name: 'Users endpoint', groupId: 'users', url: '{{api}}/users' }),
++    endpoint({ id: 'orders', name: 'Orders endpoint', groupId: 'orders' }),
++    endpoint({ id: 'orphan', name: 'Orphan endpoint', groupId: 'missing' }),
++  ],
++  configPath: '/tmp/config.json',
++}
++
++describe('EndpointList', () => {
++  let wrapper: VueWrapper
++  let configStore: ReturnType<typeof useConfigStore>
++  let requestStore: ReturnType<typeof useRequestStore>
++
++  beforeEach(() => {
++    const pinia = createPinia()
++    setActivePinia(pinia)
++    configStore = useConfigStore()
++    requestStore = useRequestStore()
++    configStore.config = fixtureConfig
++    configStore.ensureSelectedVariable()
++    vi.spyOn(useResponseStore(), 'clear')
++    wrapper = mount(EndpointList, { global: { plugins: [pinia] } })
++  })
++
++  it('selects a variable and reloads the active endpoint URL', async () => {
++    configStore.selectEndpoint('users')
++
++    await wrapper.findAll('[data-testid="variable-option"]')[1].trigger('click')
++
++    expect(configStore.selectedVariable?.environment).toBe('production')
++    expect(requestStore.url).toBe('https://prod.example/users')
++  })
++
++  it('renders configured groups as differently accented endpoint cards', () => {
++    const cards = wrapper.findAll('[data-testid="endpoint-group-card"]')
++    expect(cards).toHaveLength(2)
++    expect(cards[0].attributes('style')).not.toBe(cards[1].attributes('style'))
++    expect(cards[0].text()).toContain('Users')
++  })
++
++  it('puts unknown-group endpoints in the ungrouped card', () => {
++    expect(wrapper.get('[data-testid="ungrouped-card"]').text()).toContain('Orphan endpoint')
++  })
++})
+diff --git a/frontend/src/components/EndpointList.vue b/frontend/src/components/EndpointList.vue
+index ee83382..14712a7 100644
+--- a/frontend/src/components/EndpointList.vue
++++ b/frontend/src/components/EndpointList.vue
+@@ -1,12 +1,27 @@
+ <template>
+   <div class="endpoint-list">
++    <div class="variable-selector" aria-label="Configuration variable">
++      <button
++        v-for="(variable, index) in configStore.config?.variables ?? []"
++        :key="`${variable.id}-${variable.environment}`"
++        type="button"
++        class="variable-option"
++        :class="{ selected: configStore.selectedVariableIndex === index }"
++        :aria-pressed="configStore.selectedVariableIndex === index"
++        data-testid="variable-option"
++        @click="selectVariable(index)"
++      >
++        {{ variable.environment || variable.id }} ({{ variable.id }})
++      </button>
++    </div>
++
+     <div class="search-box">
+       <input
+         v-model="searchQuery"
+         type="text"
+         placeholder="Search endpoints..."
+         class="acrylic-input search-input"
+       />
+     </div>
+ 
+     <div class="filter-row">
+@@ -14,84 +29,98 @@
+         <option value="">All Methods</option>
+         <option value="GET">GET</option>
+         <option value="POST">POST</option>
+         <option value="PUT">PUT</option>
+         <option value="PATCH">PATCH</option>
+         <option value="DELETE">DELETE</option>
+       </select>
+     </div>
+ 
+     <div class="groups">
+-      <div
++      <section
+         v-for="group in filteredGroups"
+         :key="group.id"
+-        class="group"
++        class="group endpoint-group-card"
++        :style="{ '--group-accent': groupAccent(group.id) }"
++        data-testid="endpoint-group-card"
+       >
+-        <div class="group-header" @click="toggleGroup(group.id)">
++        <button type="button" class="group-header" @click="toggleGroup(group.id)">
+           <span class="group-name">{{ group.name }}</span>
+           <span class="group-toggle">{{ collapsedGroups[group.id] ? '+' : '-' }}</span>
+-        </div>
++        </button>
+ 
+         <div v-if="!collapsedGroups[group.id]" class="endpoints">
+-          <div
++          <button
+             v-for="endpoint in getEndpointsByGroup(group.id)"
+             :key="endpoint.id"
++            type="button"
+             class="endpoint-item"
+             :class="{ selected: selectedEndpointId === endpoint.id, disabled: !endpoint.enabled }"
++            :disabled="!endpoint.enabled"
+             @click="selectEndpoint(endpoint)"
+           >
+             <span class="method-badge" :class="endpoint.method.toLowerCase()">
+               {{ endpoint.method }}
+             </span>
+             <span class="endpoint-name">{{ endpoint.name }}</span>
+             <span v-if="endpoint.hasOAuth" class="oauth-icon">🔒</span>
+-          </div>
++          </button>
+         </div>
+-      </div>
++      </section>
+ 
+-      <div v-if="ungroupedEndpoints.length > 0" class="group">
++      <section
++        v-if="ungroupedEndpoints.length > 0"
++        class="group endpoint-group-card"
++        :style="{ '--group-accent': 'var(--border-color)' }"
++        data-testid="ungrouped-card"
++      >
+         <div class="group-header">
+           <span class="group-name">Ungrouped</span>
+         </div>
+         <div class="endpoints">
+-          <div
++          <button
+             v-for="endpoint in ungroupedEndpoints"
+             :key="endpoint.id"
++            type="button"
+             class="endpoint-item"
+             :class="{ selected: selectedEndpointId === endpoint.id, disabled: !endpoint.enabled }"
++            :disabled="!endpoint.enabled"
+             @click="selectEndpoint(endpoint)"
+           >
+             <span class="method-badge" :class="endpoint.method.toLowerCase()">
+               {{ endpoint.method }}
+             </span>
+             <span class="endpoint-name">{{ endpoint.name }}</span>
+-          </div>
++          </button>
+         </div>
+-      </div>
++      </section>
++
++      <p v-if="filteredEndpoints.length === 0" class="empty-search">No endpoints match your search.</p>
+     </div>
+   </div>
+ </template>
+ 
+ <script setup lang="ts">
+ import { ref, computed } from 'vue'
+ import { useConfigStore } from '../stores/config'
+ import { useRequestStore } from '../stores/request'
+ import { useResponseStore } from '../stores/response'
+ import type { EndpointView } from '../types'
+ 
+ const configStore = useConfigStore()
+ const requestStore = useRequestStore()
+ const responseStore = useResponseStore()
+ 
+ const searchQuery = ref('')
+ const methodFilter = ref('')
+ const collapsedGroups = ref<Record<string, boolean>>({})
++const groupPalette = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4']
+ 
+ const selectedEndpointId = computed(() => configStore.selectedEndpointId)
+ 
+ const filteredEndpoints = computed(() => {
+   let eps = configStore.config?.endpoints || []
+ 
+   if (searchQuery.value) {
+     const q = searchQuery.value.toLowerCase()
+     eps = eps.filter(ep =>
+       ep.name.toLowerCase().includes(q) ||
+@@ -104,48 +133,103 @@ const filteredEndpoints = computed(() => {
+   }
+ 
+   return eps
+ })
+ 
+ const filteredGroups = computed(() => {
+   const groupIds = new Set(filteredEndpoints.value.map(ep => ep.groupId))
+   return (configStore.config?.endpointGroups || []).filter(g => groupIds.has(g.id))
+ })
+ 
++const knownGroupIds = computed(() => new Set((configStore.config?.endpointGroups ?? []).map(g => g.id)))
++
+ const ungroupedEndpoints = computed(() =>
+-  filteredEndpoints.value.filter(ep => !ep.groupId)
++  filteredEndpoints.value.filter(ep => !knownGroupIds.value.has(ep.groupId))
+ )
+ 
+ function getEndpointsByGroup(groupId: string) {
+   return filteredEndpoints.value.filter(ep => ep.groupId === groupId)
+ }
+ 
+ function toggleGroup(groupId: string) {
+   collapsedGroups.value[groupId] = !collapsedGroups.value[groupId]
+ }
+ 
++function groupAccent(groupId: string) {
++  const index = (configStore.config?.endpointGroups ?? []).findIndex(g => g.id === groupId)
++  return groupPalette[index % groupPalette.length]
++}
++
++function loadEndpoint(endpoint: EndpointView) {
++  requestStore.loadFromEndpoint({ ...endpoint, url: configStore.substituteVariables(endpoint.url) })
++}
++
+ function selectEndpoint(endpoint: EndpointView) {
+   if (!endpoint.enabled) return
+   configStore.selectEndpoint(endpoint.id)
+-  requestStore.loadFromEndpoint(endpoint)
++  loadEndpoint(endpoint)
+   responseStore.clear()
+ }
++
++function selectVariable(index: number) {
++  configStore.selectVariable(index)
++  if (configStore.selectedEndpoint) loadEndpoint(configStore.selectedEndpoint)
++}
+ </script>
+ 
+ <style scoped>
+ .endpoint-list {
+   display: flex;
+   flex-direction: column;
+   height: 100%;
+   padding: 12px;
+ }
+ 
++.variable-selector {
++  display: flex;
++  flex-wrap: wrap;
++  gap: 6px;
++  margin-bottom: 10px;
++}
++
++.variable-option {
++  border: 1px solid var(--border-color);
++  border-radius: 6px;
++  padding: 5px 8px;
++  background: var(--bg-primary);
++  color: var(--text-primary);
++  cursor: pointer;
++}
++
++.variable-option:hover:not(:disabled) {
++  border-color: var(--accent-color);
++}
++
++.variable-option.selected {
++  background: var(--accent-color);
++  border-color: var(--accent-color);
++  color: white;
++}
++
++.variable-option:focus-visible,
++.group-header:focus-visible,
++.endpoint-item:focus-visible {
++  outline: 2px solid var(--accent-color);
++  outline-offset: 2px;
++}
++
++.variable-option:disabled,
++.endpoint-item:disabled {
++  opacity: 0.5;
++  cursor: not-allowed;
++}
++
+ .search-input {
+   width: 100%;
+   margin-bottom: 8px;
+ }
+ 
+ .method-filter {
+   width: 100%;
+   margin-bottom: 12px;
+   padding: 6px 8px;
+   border-radius: 6px;
+@@ -154,74 +238,94 @@ function selectEndpoint(endpoint: EndpointView) {
+   color: var(--text-primary);
+ }
+ 
+ .groups {
+   flex: 1;
+   overflow-y: auto;
+ }
+ 
+ .group {
+   margin-bottom: 8px;
++  border: 1px solid var(--group-accent);
++  border-left-width: 4px;
++  border-radius: 6px;
++  overflow: hidden;
+ }
+ 
+ .group-header {
+   display: flex;
++  width: 100%;
+   justify-content: space-between;
+   padding: 6px 8px;
+   cursor: pointer;
+-  border-radius: 6px;
++  border: 0;
+   background: var(--bg-primary);
++  color: var(--text-primary);
+   margin-bottom: 4px;
++  text-align: left;
+ }
+ 
+ .group-header:hover {
+   background: var(--border-color);
+ }
+ 
+ .group-name {
+   font-weight: 600;
+   font-size: 13px;
++  color: var(--group-accent);
+ }
+ 
+ .endpoints {
+   padding-left: 8px;
+ }
+ 
+ .endpoint-item {
+   display: flex;
++  width: 100%;
+   align-items: center;
+   gap: 8px;
+   padding: 8px;
+   cursor: pointer;
++  border: 0;
+   border-radius: 6px;
++  background: transparent;
++  color: var(--text-primary);
++  text-align: left;
+   transition: background 0.15s;
+ }
+ 
+-.endpoint-item:hover {
++.endpoint-item:hover:not(:disabled) {
+   background: var(--bg-primary);
+ }
+ 
+ .endpoint-item.selected {
+   background: var(--accent-color);
+   color: white;
+ }
+ 
+ .endpoint-item.selected .method-badge {
+   background: rgba(255,255,255,0.2);
+   color: white;
+ }
+ 
+ .endpoint-item.disabled {
+   opacity: 0.5;
+   cursor: not-allowed;
+ }
+ 
++.empty-search {
++  margin: 16px 8px;
++  color: var(--text-secondary);
++  font-size: 13px;
++  text-align: center;
++}
++
+ .method-badge {
+   font-size: 10px;
+   font-weight: 700;
+   padding: 2px 6px;
+   border-radius: 4px;
+   background: var(--bg-primary);
+   color: var(--text-primary);
+ }
+ 
+ .method-badge.get { color: #61affe; }
