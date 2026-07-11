@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import type { ConfigView, EndpointView, Variable } from '../types'
+import type { ConfigView, RequestInput, ResponseOutput, TokenStatus } from '../types'
 
 declare global {
   interface Window {
@@ -10,6 +10,9 @@ declare global {
         ReloadConfig: () => Promise<ConfigView>
         ValidateConfig: () => Promise<{ valid: boolean; errors: string[]; warnings: string[] }>
         GetAppInfo: () => Promise<{ version: string; name: string }>
+        SendRequest: (input: RequestInput) => Promise<ResponseOutput>
+        CancelRequest: (requestId: string) => Promise<void>
+        GetTokenStatus: (profileId: string) => Promise<TokenStatus>
       }
     }
   }
@@ -30,7 +33,7 @@ export const useConfigStore = defineStore('config', () => {
     loading.value = true
     error.value = null
     try {
-      config.value = await window.go?.app.LoadConfig()
+      config.value = await window.go?.app.LoadConfig() ?? null
     } catch (e) {
       error.value = String(e)
     } finally {

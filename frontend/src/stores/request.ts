@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
 import type { KeyValue } from '../types'
 
 export const useRequestStore = defineStore('request', () => {

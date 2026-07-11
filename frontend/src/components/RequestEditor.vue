@@ -95,14 +95,13 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, computed } from 'vue'
 import { NTabs, NTabPane } from 'naive-ui'
 import { useRequestStore } from '../stores/request'
 import { useConfigStore } from '../stores/config'
 import { useResponseStore } from '../stores/response'
 import { useOAuthStore } from '../stores/oauth'
 import KeyValueEditor from './KeyValueEditor.vue'
-import type { KeyValue } from '../types'
 
 const requestStore = useRequestStore()
 const configStore = useConfigStore()
@@ -190,7 +189,9 @@ async function sendRequest() {
       oauthProfileId: oauthProfileId.value,
     })
 
-    responseStore.setResponse(result)
+    if (result) {
+      responseStore.setResponse(result)
+    }
 
     if (useOAuth.value && oauthProfileId.value) {
       const status = await window.go?.app.GetTokenStatus(oauthProfileId.value)

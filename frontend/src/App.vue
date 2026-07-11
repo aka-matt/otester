@@ -1,5 +1,5 @@
 <template>
-  <n-config-provider :theme="theme">
+  <n-config-provider :theme="themeStore.theme">
     <n-message-provider>
       <n-dialog-provider>
         <div class="app-container">
