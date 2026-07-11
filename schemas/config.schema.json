@@ -1,0 +1,345 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "app",
+    "variables",
+    "oauth_profiles",
+    "endpoint_groups",
+    "endpoints"
+  ],
+  "properties": {
+    "app": {
+      "$ref": "#/$defs/app"
+    },
+    "variables": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/variable"
+      }
+    },
+    "oauth_profiles": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/oauthProfile"
+      }
+    },
+    "endpoint_groups": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/endpointGroup"
+      }
+    },
+    "endpoints": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/endpoint"
+      }
+    }
+  },
+  "$defs": {
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "title",
+        "default_timeout_seconds",
+        "max_response_body_bytes",
+        "allow_insecure_tls",
+        "persist_request_history"
+      ],
+      "properties": {
+        "name": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        },
+        "default_timeout_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "max_response_body_bytes": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "allow_insecure_tls": {
+          "type": "boolean"
+        },
+        "persist_request_history": {
+          "type": "boolean"
+        }
+      }
+    },
+    "variable": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "base_url",
+        "environment"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "base_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "environment": {
+          "type": "string"
+        },
+        "override_profile_id": {
+          "type": "string"
+        }
+      }
+    },
+    "oauthProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "type",
+        "org_id_uuid",
+        "client_id",
+        "client_secret",
+        "scope",
+        "token_url",
+        "refresh_before_expiry_seconds"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "microsoft_client_credentials"
+          ]
+        },
+        "org_id_uuid": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "client_id": {
+          "type": "string"
+        },
+        "client_secret": {
+          "type": "string"
+        },
+        "scope": {
+          "type": "string"
+        },
+        "token_url": {
+          "type": "string",
+          "format": "uri"
+        },
+        "refresh_before_expiry_seconds": {
+          "type": "integer",
+          "minimum": 0
+        }
+      }
+    },
+    "endpointGroup": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    },
+    "endpoint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "name",
+        "description",
+        "group_id",
+        "enabled",
+        "method",
+        "url",
+        "auth",
+        "headers",
+        "query_parameters",
+        "body"
+      ],
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "group_id": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        },
+        "method": {
+          "type": "string",
+          "enum": [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "HEAD",
+            "OPTIONS"
+          ]
+        },
+        "url": {
+          "type": "string"
+        },
+        "timeout_seconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "auth": {
+          "$ref": "#/$defs/auth"
+        },
+        "headers": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/header"
+          }
+        },
+        "query_parameters": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/queryParameter"
+          }
+        },
+        "body": {
+          "$ref": "#/$defs/body"
+        }
+      }
+    },
+    "auth": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/oauthAuth"
+        },
+        {
+          "$ref": "#/$defs/noAuth"
+        }
+      ]
+    },
+    "oauthAuth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "profile_id",
+        "allow_authorization_header_override"
+      ],
+      "properties": {
+        "type": {
+          "const": "oauth2"
+        },
+        "profile_id": {
+          "type": "string"
+        },
+        "allow_authorization_header_override": {
+          "type": "boolean"
+        }
+      }
+    },
+    "noAuth": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type"
+      ],
+      "properties": {
+        "type": {
+          "const": "none"
+        }
+      }
+    },
+    "header": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "value",
+        "enabled"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "queryParameter": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "key",
+        "value",
+        "enabled"
+      ],
+      "properties": {
+        "key": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        },
+        "enabled": {
+          "type": "boolean"
+        }
+      }
+    },
+    "body": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "type",
+        "content"
+      ],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": [
+            "none",
+            "text",
+            "json",
+            "xml",
+            "form",
+            "multipart",
+            "binary"
+          ]
+        },
+        "content": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}
