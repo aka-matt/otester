@@ -4,10 +4,14 @@ import (
 	"context"
 
 	"otester/internal/config"
+	"otester/internal/httpclient"
+	"otester/internal/oauth"
 )
 
 type App struct {
-	ctx context.Context
+	ctx        context.Context
+	oauth      *oauth.MicrosoftOAuth
+	httpClient *httpclient.Client
 }
 
 type AppInfo struct {
@@ -16,7 +20,10 @@ type AppInfo struct {
 }
 
 func NewApp() *App {
-	return &App{}
+	return &App{
+		oauth:      oauth.NewMicrosoftOAuth(),
+		httpClient: httpclient.NewClient(),
+	}
 }
 
 func (a *App) Startup(ctx context.Context) {
@@ -55,4 +62,20 @@ func (a *App) ValidateConfig() (*config.ValidationResult, error) {
 	}
 	result := config.ValidateConfig(cfg)
 	return result, nil
+}
+
+func (a *App) SendRequest(ctx context.Context, input *config.OAuthProfile) (string, bool, error) {
+	return a.oauth.GetAccessToken(ctx, input)
+}
+
+func (a *App) CancelRequest(requestID string) error {
+	return a.httpClient.CancelRequest(requestID)
+}
+
+func (a *App) ClearTokenCache() {
+	a.oauth.ClearCache()
+}
+
+func (a *App) GetTokenStatus(profileID string, profile *config.OAuthProfile) (*oauth.TokenStatus, error) {
+	return a.oauth.GetTokenStatus(profileID, profile)
 }
