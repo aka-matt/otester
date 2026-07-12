@@ -216,3 +216,47 @@ func TestResponseOutput_TLS_Omitempty(t *testing.T) {
 		t.Errorf("expected no tls field when TLS is nil, got %s", data)
 	}
 }
+
+func TestTLSInfo_ValidationSkipped_Roundtrip(t *testing.T) {
+	info := TLSInfo{
+		Status:            "ok",
+		TargetHost:        "self-signed.example:443",
+		ValidationSkipped: true,
+		OriginalError:     "x509: certificate signed by unknown authority",
+		Certificates:      []CertificateView{},
+	}
+	data, err := json.Marshal(info)
+	if err != nil {
+		t.Fatalf("marshal TLSInfo: %v", err)
+	}
+	if !strings.Contains(string(data), `"validationSkipped":true`) {
+		t.Errorf("expected validationSkipped in JSON, got %s", data)
+	}
+	if !strings.Contains(string(data), `"originalError":"x509: certificate signed by unknown authority"`) {
+		t.Errorf("expected originalError in JSON, got %s", data)
+	}
+	var back TLSInfo
+	if err := json.Unmarshal(data, &back); err != nil {
+		t.Fatalf("unmarshal TLSInfo: %v", err)
+	}
+	if !back.ValidationSkipped {
+		t.Error("ValidationSkipped did not round-trip as true")
+	}
+	if back.OriginalError != "x509: certificate signed by unknown authority" {
+		t.Errorf("OriginalError round-trip mismatch: %q", back.OriginalError)
+	}
+}
+
+func TestTLSInfo_DefaultFields_Omit(t *testing.T) {
+	info := TLSInfo{Status: "ok", TargetHost: "example.com"}
+	data, err := json.Marshal(info)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(data), `"validationSkipped"`) {
+		t.Errorf("expected validationSkipped omitted when false, got %s", data)
+	}
+	if strings.Contains(string(data), `"originalError"`) {
+		t.Errorf("expected originalError omitted when empty, got %s", data)
+	}
+}

@@ -82,6 +82,8 @@ type TLSInfo struct {
 	AttemptedServerName string               `json:"attemptedServerName,omitempty"`
 	Connection          *TLSConnectionView   `json:"connection,omitempty"`
 	Certificates        []CertificateView    `json:"certificates"`
+	ValidationSkipped   bool                 `json:"validationSkipped,omitempty"`
+	OriginalError       string               `json:"originalError,omitempty"`
 }
 
 type TLSConnectionView struct {
