@@ -41,3 +41,15 @@ Task 9: complete (commits 8339e38..f3f601f, review found 1 High + 1 Low)
 - All new frontend tests pass (16/16: CertificateViewer 13 + ResponseViewer 3)
 - Pre-existing EndpointList.test.ts failures confirmed unrelated
 - Whole-branch review verdict: APPROVED FOR MERGE
+
+## TLS Insecure Retry Branch (current)
+Step6 branch starting commit: 1f1bf4d (docs: add TLS insecure-retry design spec)
+Plan: docs/superpowers/plans/2026-07-11-tls-insecure-retry.md
+
+Task 1: complete (commits 1f1bf4d..7d9e5d1, review clean; deviation: ValidationSkipped has omitempty to satisfy the omit test)
+Task 2: complete (commits 7d9e5d1..74df955, review clean)
+Task 3: complete (commits 74df955..591c720, review clean; fix commit excludes context timeouts from isTLSError)
+Task 4: complete (commits 591c720..0c08776, review clean; minor: CRLF churn, dead-code observation on App.allowInsecureTLS mirror — both non-blocking)
+Task 5: complete (commits 0c08776..9588e2a, review clean)
+Task 6: complete (commits 9588e2a..691b8a9, review clean; concerns: pre-existing EndpointList failures + WSL rollup dep, both environment-only)
+Task 7: complete (final verification: 6 backend packages OK; frontend 21/21 tests pass; vue-tsc clean via npm run build; go vet clean; 8 commits on step5 since 1f1bf4d)
