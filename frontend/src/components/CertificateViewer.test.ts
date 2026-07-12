@@ -182,4 +182,32 @@ describe('CertificateViewer', () => {
       expect.stringContaining('BEGIN CERTIFICATE')
     )
   })
+
+  it('renders warning banner when status=ok and validationSkipped=true', () => {
+    const info: TLSInfo = {
+      status: 'ok',
+      targetHost: 'self-signed.example:443',
+      connection: fixtureConnection(),
+      certificates: [fixtureCert()],
+      validationSkipped: true,
+      originalError: 'x509: certificate signed by unknown authority',
+    }
+    const w = mount(CertificateViewer, { props: { info } })
+    expect(w.text()).toContain('TLS certificate validation was skipped')
+    expect(w.text()).toContain('allow_insecure_tls: true')
+    expect(w.text()).toContain('x509: certificate signed by unknown authority')
+  })
+
+  it('does NOT render warning banner when validationSkipped is false', () => {
+    const info: TLSInfo = {
+      status: 'ok',
+      targetHost: 'example.com:443',
+      connection: fixtureConnection(),
+      certificates: [fixtureCert()],
+      validationSkipped: false,
+    }
+    const w = mount(CertificateViewer, { props: { info } })
+    expect(w.text()).not.toContain('TLS certificate validation was skipped')
+    expect(w.text()).not.toContain('allow_insecure_tls')
+  })
 })

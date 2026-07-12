@@ -24,6 +24,18 @@
 
     <!-- 4. ok -->
     <div v-else class="ok-content">
+      <div v-if="info.validationSkipped" class="warning-panel">
+        <div class="panel-title">⚠ TLS certificate validation was skipped</div>
+        <div class="panel-body">
+          <div class="warning-reason">
+            <code>allow_insecure_tls: true</code> in <code>config.json</code> caused this request to fall back to an insecure connection.
+          </div>
+          <div v-if="info.originalError" class="warning-original-error">
+            Original error: <code>{{ info.originalError }}</code>
+          </div>
+        </div>
+      </div>
+
       <!-- TLS connection block -->
       <div class="connection-block acrylic-card">
         <div class="block-title">TLS Connection</div>
@@ -350,6 +362,34 @@ async function copy(text: string, msg: string) {
 
 .copy-btn:hover {
   background: var(--border-color);
+}
+
+.warning-panel {
+  padding: 12px 16px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  background: rgba(255, 152, 0, 0.1);
+  border: 1px solid var(--warning-color);
+}
+
+.warning-panel .panel-title {
+  color: var(--warning-color);
+}
+
+.warning-panel .warning-reason,
+.warning-panel .warning-original-error {
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-top: 6px;
+  word-break: break-all;
+}
+
+.warning-panel code {
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 12px;
+  background: var(--bg-primary);
+  padding: 1px 6px;
+  border-radius: 4px;
 }
 
 .pill {
