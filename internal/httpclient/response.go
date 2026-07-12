@@ -23,7 +23,7 @@ func ParseResponse(resp *http.Response, req *http.Request, requestID string, dur
 			DurationMs:    duration.Milliseconds(),
 			ErrorCode:     string(model.ErrAPIRequestFailed),
 			ErrorMessage:  err.Error(),
-			TLS:           BuildTLSInfo(resp, req),
+			TLS:           BuildTLSInfo(resp, req, false, ""),
 		}
 		return output, nil
 	}
@@ -40,7 +40,7 @@ func ParseResponse(resp *http.Response, req *http.Request, requestID string, dur
 		DurationMs:    duration.Milliseconds(),
 		SizeBytes:     int64(len(bodyBytes)),
 		ContentType:   contentType,
-		TLS:           BuildTLSInfo(resp, req),
+		TLS:           BuildTLSInfo(resp, req, false, ""),
 	}
 	return output, nil
 }

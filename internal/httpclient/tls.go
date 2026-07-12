@@ -300,7 +300,10 @@ func sha256Of(b []byte) []byte {
 
 // BuildTLSInfo returns the TLSInfo for a successful (or non-TLS) HTTP response.
 // When resp.TLS is nil (plain HTTP), status is "no_tls_attempted".
-func BuildTLSInfo(resp *http.Response, req *http.Request) *model.TLSInfo {
+// When validationSkipped is true (the request succeeded via a retry with
+// InsecureSkipVerify after a first attempt failed), the returned TLSInfo
+// carries ValidationSkipped=true and OriginalError=<first attempt message>.
+func BuildTLSInfo(resp *http.Response, req *http.Request, validationSkipped bool, originalError string) *model.TLSInfo {
 	host := ""
 	if req != nil && req.URL != nil {
 		host = req.URL.Host
@@ -318,6 +321,20 @@ func BuildTLSInfo(resp *http.Response, req *http.Request) *model.TLSInfo {
 		AttemptedServerName: resp.TLS.ServerName,
 		Connection:          buildConnectionView(resp.TLS),
 		Certificates:        buildCertificateViews(resp.TLS.PeerCertificates),
+		ValidationSkipped:   validationSkipped,
+		OriginalError:       originalError,
+	}
+}
+
+// InsecureTLSClient returns a fresh *http.Client whose Transport skips
+// certificate validation. It is intended for one-shot retry attempts
+// after a TLS handshake failure; the returned client must not be shared
+// across goroutines because each call constructs a new Transport.
+func InsecureTLSClient() *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		},
 	}
 }
 

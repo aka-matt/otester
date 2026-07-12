@@ -7,6 +7,7 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"errors"
@@ -377,7 +378,7 @@ func TestBuildTLSInfo_NonHTTPS(t *testing.T) {
 		TLS:        nil,
 	}
 	req, _ := http.NewRequest("GET", "http://example.com/foo", nil)
-	got := BuildTLSInfo(resp, req)
+	got := BuildTLSInfo(resp, req, false, "")
 	if got == nil {
 		t.Fatal("expected non-nil TLSInfo")
 	}
@@ -392,6 +393,9 @@ func TestBuildTLSInfo_NonHTTPS(t *testing.T) {
 	}
 	if len(got.Certificates) != 0 {
 		t.Errorf("Certificates should be empty for non-HTTPS, got %d", len(got.Certificates))
+	}
+	if got.ValidationSkipped {
+		t.Error("ValidationSkipped should be false for plain HTTP")
 	}
 }
 
@@ -408,7 +412,7 @@ func TestBuildTLSInfo_HTTPS(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	got := BuildTLSInfo(resp, req)
+	got := BuildTLSInfo(resp, req, false, "")
 	if got == nil || got.Status != "ok" {
 		t.Fatalf("expected Status=ok, got %+v", got)
 	}
@@ -420,6 +424,44 @@ func TestBuildTLSInfo_HTTPS(t *testing.T) {
 	}
 	if got.Certificates[0].Position != "leaf" {
 		t.Errorf("first cert position = %q, want leaf", got.Certificates[0].Position)
+	}
+	if got.ValidationSkipped {
+		t.Error("ValidationSkipped should be false for clean TLS")
+	}
+}
+
+func TestBuildTLSInfo_ValidationSkipped(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	// Use a client that trusts the server cert so the call succeeds.
+	rootCAs := x509.NewCertPool()
+	rootCAs.AddCert(server.Certificate())
+
+	resp, err := (&http.Client{
+		Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: rootCAs}},
+	}).Get(server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	req, _ := http.NewRequest("GET", server.URL, nil)
+	got := BuildTLSInfo(resp, req, true, "x509: certificate signed by unknown authority")
+
+	if got.Status != "ok" {
+		t.Fatalf("Status = %q, want ok", got.Status)
+	}
+	if !got.ValidationSkipped {
+		t.Error("ValidationSkipped should be true")
+	}
+	if got.OriginalError != "x509: certificate signed by unknown authority" {
+		t.Errorf("OriginalError = %q, want x509: ...", got.OriginalError)
+	}
+	if len(got.Certificates) < 1 {
+		t.Error("Certificates should be populated from resp.TLS")
 	}
 }
 
