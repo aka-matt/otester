@@ -243,11 +243,20 @@ function formatSize(bytes: number): string {
   color: var(--warning-color);
 }
 
+.body-content {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
 .body-pre {
+  flex: 1 1 0;
   background: var(--bg-primary);
   padding: 12px;
   border-radius: 8px;
   overflow-x: auto;
+  overflow-y: auto;
   font-family: 'Consolas', 'Monaco', monospace;
   font-size: 13px;
   white-space: pre-wrap;

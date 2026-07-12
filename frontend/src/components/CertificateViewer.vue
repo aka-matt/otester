@@ -231,7 +231,10 @@ async function copy(text: string, msg: string) {
 </script>
 <style scoped>
 .certificate-viewer {
+  flex: 1 1 0;
+  min-height: 0;
   padding: 8px 0;
+  overflow-y: auto;
 }
 
 .empty-state {
