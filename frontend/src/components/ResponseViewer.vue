@@ -167,10 +167,32 @@ function formatSize(bytes: number): string {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  height: 100%;
+}
+
+/* Make n-tabs stretch to fill remaining vertical space */
+.response-content :deep(.n-tabs) {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.response-content :deep(.n-tabs-nav) {
+  flex-shrink: 0;
+}
+
+.response-content :deep(.n-tabs-pane-wrapper),
+.response-content :deep(.n-tab-pane) {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
 }
 
 .response-overview {
   padding: 12px;
+  flex-shrink: 0;
 }
 
 .status-display {
@@ -233,7 +255,7 @@ function formatSize(bytes: number): string {
 }
 
 .headers-table {
-  max-height: 300px;
+  flex: 1 1 0;
   overflow-y: auto;
 }
 
