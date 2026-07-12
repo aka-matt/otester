@@ -444,6 +444,83 @@ func TestClient_DoRequest_NonTLSError_NoRetry(t *testing.T) {
 	}
 }
 
+// TestClient_DoRequest_PostBody_PreservedAcrossTLSRetry locks in the fix for
+// Finding 1 (POST/PUT/PATCH bodies silently lost on retry). The first attempt
+// fails the TLS handshake because the test server's cert is only valid for
+// "example.com" and we connect via 127.0.0.1. The retry with InsecureSkipVerify
+// succeeds — and crucially, the server must observe the original POST body, not
+// an empty one. Before the fix, req.Clone(reqCtx) shallow-copied an already-
+// consumed *strings.Reader, so the retry sent "".
+func TestClient_DoRequest_PostBody_PreservedAcrossTLSRetry(t *testing.T) {
+	const wantBody = `{"name":"retry-body"}`
+
+	var receivedBody string
+	var receivedMethod string
+	var mu sync.Mutex
+
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		mu.Lock()
+		receivedMethod = r.Method
+		receivedBody = string(body)
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"received":true}`))
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.SetAllowInsecureTLS(true)
+
+	// Force a TLS hostname mismatch: cert is valid for "example.com", we
+	// connect via 127.0.0.1.
+	u, _ := url.Parse(server.URL)
+	inputURL := strings.Replace(server.URL, u.Hostname(), "127.0.0.1", 1)
+
+	input := &model.RequestInput{
+		RequestID:      "test-post-body-retry",
+		Method:         "POST",
+		URL:            inputURL,
+		BodyType:       "json",
+		Body:           wantBody,
+		TimeoutSeconds: 5,
+	}
+
+	output, err := client.DoRequest(context.Background(), input)
+	if err != nil {
+		t.Fatalf("DoRequest returned error: %v", err)
+	}
+
+	if output.ErrorCode != "" {
+		t.Fatalf("expected no ErrorCode, got %q (%s)", output.ErrorCode, output.ErrorMessage)
+	}
+	if output.StatusCode != http.StatusOK {
+		t.Fatalf("expected StatusCode 200, got %d", output.StatusCode)
+	}
+	if output.TLS == nil {
+		t.Fatal("expected TLS info populated after retry")
+	}
+	if !output.TLS.ValidationSkipped {
+		t.Error("expected TLS.ValidationSkipped=true after retry")
+	}
+	if output.TLS.Status != "ok" {
+		t.Errorf("expected TLS.Status=ok after retry, got %s", output.TLS.Status)
+	}
+
+	mu.Lock()
+	gotMethod := receivedMethod
+	gotBody := receivedBody
+	mu.Unlock()
+
+	if gotMethod != "POST" {
+		t.Errorf("expected server to observe method POST, got %s", gotMethod)
+	}
+	if gotBody != wantBody {
+		t.Errorf("expected server to observe body %q, got %q — body was lost on retry", wantBody, gotBody)
+	}
+}
+
 func TestIsTLSError(t *testing.T) {
 	tests := []struct {
 		name string

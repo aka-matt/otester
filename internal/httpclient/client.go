@@ -77,9 +77,20 @@ func (c *Client) DoRequest(ctx context.Context, input *model.RequestInput) (*mod
 
 	// First attempt failed. Classify: is this a TLS error and is the insecure flag on?
 	if c.getAllowInsecureTLS() && isTLSError(err) {
-		retryClient := InsecureTLSClient()
+		retryClient := InsecureTLSClient(time.Duration(input.TimeoutSeconds) * time.Second)
 		retryStart := time.Now()
-		retryResp, retryErr := retryClient.Do(req.Clone(reqCtx))
+		// Clone makes a shallow copy of Body. The first attempt's Do has already
+		// consumed the underlying reader, so re-using it would silently send an
+		// empty body for non-GET methods. Re-populate Body from GetBody() (set by
+		// http.NewRequestWithContext for *strings.Reader / *bytes.Reader /
+		// *bytes.Buffer) so the retry transmits the original payload.
+		retryReq := req.Clone(reqCtx)
+		if retryReq.GetBody != nil {
+			if body, bodyErr := retryReq.GetBody(); bodyErr == nil {
+				retryReq.Body = body
+			}
+		}
+		retryResp, retryErr := retryClient.Do(retryReq)
 		retryDuration := time.Since(retryStart)
 
 		if retryErr == nil {

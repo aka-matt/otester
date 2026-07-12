@@ -329,9 +329,12 @@ func BuildTLSInfo(resp *http.Response, req *http.Request, validationSkipped bool
 // InsecureTLSClient returns a fresh *http.Client whose Transport skips
 // certificate validation. It is intended for one-shot retry attempts
 // after a TLS handshake failure; the returned client must not be shared
-// across goroutines because each call constructs a new Transport.
-func InsecureTLSClient() *http.Client {
+// across goroutines because each call constructs a new Transport. The
+// timeout is enforced by the shared client's policy so a hung insecure
+// connection cannot outlive the request's deadline.
+func InsecureTLSClient(timeout time.Duration) *http.Client {
 	return &http.Client{
+		Timeout: timeout,
 		Transport: &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 		},
