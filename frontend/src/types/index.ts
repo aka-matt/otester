@@ -165,7 +165,7 @@ export interface CertificateView {
 }
 
 export interface TLSInfo {
-  status: 'ok' | 'handshake_failed' | 'no_tls_attempted'
+  status: string
   error?: string
   targetHost: string
   attemptedServerName?: string
