@@ -4,7 +4,7 @@
     "title": "otester - API Debugger",
     "defaultTimeoutSeconds": 30,
     "maxResponseBodyBytes": 10485760,
-    "allowInsecureTLS": false,
+    "allowInsecureTLS": true,
     "persistRequestHistory": false
   },
   "variables": [

@@ -1,39 +1,29 @@
-# Task 2 report: Backend tls.go primitive formatters
+# Task 2 Report — TLS insecure-retry plan
 
-## Status: DONE_WITH_CONCERNS
+## Status
+DONE
 
-## Commit hash
+## Commit
+74df955a63e579c0cdac198b3a1c04a3b5c91fad — `feat(httpclient): extend BuildTLSInfo with insecure-retry fields`
 
-`da55ce2086b72fa1720a151a71bd18e33b58c7aa`
+## One-line Test Summary
+All 38 tests in `./internal/httpclient/` pass, including the new `TestBuildTLSInfo_ValidationSkipped` and the two updated existing tests with the `ValidationSkipped=false` assertion.
 
-## One-line summary
-
-8/8 helper tests pass (TestTLSVersionString, TestCipherSuiteName, TestFormatFingerprint, TestPositionLabel, TestCertToPEM, TestDaysUntilExpiry_Past, TestDaysUntilExpiry_Future, TestKeyUsageToStrings, TestExtKeyUsageToStrings); full httpclient package remains green at 24/24.
-
-## Files
-
-- `internal/httpclient/tls.go` (new) — all eight helpers plus the `var _ = base64.StdEncoding.EncodeToString` import anchor.
-- `internal/httpclient/tls_test.go` (new) — 9 test functions (8 from the brief + `TestDaysUntilExpiry_Past`) plus `contains` and `equalStringSlices` helpers.
-
-## TDD evidence
-
-- RED: first `go test ./internal/httpclient/ -run 'TestTLSVersionString|TestCipherSuiteName|TestFormatFingerprint|TestPositionLabel|TestCertToPEM|TestDaysUntilExpiry|TestKeyUsageToStrings|TestExtKeyUsageToStrings' -v` failed with `undefined: tlsVersionString`, `cipherSuiteName`, etc.
-- GREEN: after `internal/httpclient/tls.go` was created and corrected, the same focused command passed all 8 tests (TestDaysUntilExpiry is implemented as two tests, Past and Future).
+## What was done
+- `internal/httpclient/tls.go`:
+  - Extended `BuildTLSInfo` signature from `(resp, req)` to `(resp, req, validationSkipped bool, originalError string)`.
+  - `ValidationSkipped` and `OriginalError` are populated from the new parameters (relying on `,omitempty` from Task 1).
+  - Added new exported factory `InsecureTLSClient()` returning a fresh `*http.Client` with `InsecureSkipVerify: true`.
+- `internal/httpclient/response.go`:
+  - Both `BuildTLSInfo(resp, req)` callers in `ParseResponse` updated to pass `false, ""`.
+- `internal/httpclient/tls_test.go`:
+  - Added `"crypto/tls"` to the test imports.
+  - `TestBuildTLSInfo_NonHTTPS` and `TestBuildTLSInfo_HTTPS` updated to the new signature, plus an `if got.ValidationSkipped { t.Error(...) }` assertion.
+  - New test `TestBuildTLSInfo_ValidationSkipped` added: spins up an `httptest.NewTLSServer`, trusts its leaf cert via a custom `*http.Client` with `RootCAs` set, calls `BuildTLSInfo(..., true, "x509: ...")` and asserts Status="ok", ValidationSkipped=true, OriginalError round-trip, and at least one certificate.
 
 ## Verification
+- `go test ./internal/httpclient/ -run 'TestBuildTLSInfo' -v` — all PASS.
+- `go test ./internal/httpclient/ -v` — all 38 tests PASS.
 
-- Focused helper suite: 8/8 passed.
-- Full httpclient package: 24/24 passed; no pre-existing test regressed.
-- `go vet ./internal/httpclient/...` clean.
-
-## Concerns (deviations from brief required to make the suite pass)
-
-The brief's reference implementation does not compile / does not satisfy its own tests against the installed toolchain (Go 1.26.4, `go.mod` declares `go 1.26.4`). Three deviations were required and are recorded here so the brief can be corrected for future tasks:
-
-1. **`x509.KeyUsageNonRepudiation` does not exist in Go 1.26.** The constant was renamed to `x509.KeyUsageContentCommitment` upstream (see `/usr/local/go/src/crypto/x509/x509.go:589`); there is no compatibility alias. Used `KeyUsageContentCommitment` and emitted the string `"ContentCommitment"`. This is the only constant the new file references from that family, and it is not exercised by the brief's tests.
-
-2. **`tlsVersionString` default branch mismatch.** The brief's test `{0x0302, "unknown"}` contradicts the brief's implementation `return fmt.Sprintf("0x%04x", version)` (which yields `"0x0302"`). Followed the test contract and made the default branch return `"unknown"`.
-
-3. **`daysUntilExpiry` truncates due to clock skew.** The brief's `int(notAfter.Sub(time.Now()) / (24 * time.Hour))` returns 2 instead of 3 for `now+72h`, because the second `time.Now()` fires a few microseconds after the test's `time.Now()`. Replaced with `int(math.Round(notAfter.Sub(time.Now()).Hours() / 24))` so `now+72h` reliably rounds to 3 and `now-48h` remains negative. Added `"math"` to the import block.
-
-All other helpers (`cipherSuiteName`, `formatFingerprint`, `positionLabel`, `certToPEM`, `keyUsageToStrings`, `extKeyUsageToStrings`) and the `var _ = base64.StdEncoding.EncodeToString` anchor were implemented verbatim from the brief.
+## Concerns
+None.

@@ -442,6 +442,8 @@ export namespace model {
 	    attemptedServerName?: string;
 	    connection?: TLSConnectionView;
 	    certificates: CertificateView[];
+	    validationSkipped?: boolean;
+	    originalError?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new TLSInfo(source);
@@ -455,6 +457,8 @@ export namespace model {
 	        this.attemptedServerName = source["attemptedServerName"];
 	        this.connection = this.convertValues(source["connection"], TLSConnectionView);
 	        this.certificates = this.convertValues(source["certificates"], CertificateView);
+	        this.validationSkipped = source["validationSkipped"];
+	        this.originalError = source["originalError"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
