@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"sync"
 
 	wailsruntime "github.com/wailsapp/wails/v2/pkg/runtime"
 
@@ -23,6 +24,9 @@ type App struct {
 	activeConfigPath   string
 	loadConfigFromPath func(string) (*config.ConfigView, error)
 	openFileDialog     func() (string, error)
+
+	mu               sync.RWMutex
+	allowInsecureTLS bool
 }
 
 type AppInfo struct {
@@ -72,11 +76,28 @@ func (a *App) GetAppInfo() (*AppInfo, error) {
 }
 
 func (a *App) LoadConfig() (*config.ConfigView, error) {
-	return a.loadConfigFromPath(a.activeConfigPath)
+	cfg, err := a.loadConfigFromPath(a.activeConfigPath)
+	if err != nil {
+		return nil, err
+	}
+	a.applyConfig(cfg)
+	return cfg, nil
 }
 
 func (a *App) ReloadConfig() (*config.ConfigView, error) {
-	return a.loadConfigFromPath(a.activeConfigPath)
+	cfg, err := a.loadConfigFromPath(a.activeConfigPath)
+	if err != nil {
+		return nil, err
+	}
+	a.applyConfig(cfg)
+	return cfg, nil
+}
+
+func (a *App) applyConfig(cfg *config.ConfigView) {
+	a.mu.Lock()
+	a.allowInsecureTLS = cfg.App.AllowInsecureTLS
+	a.mu.Unlock()
+	a.httpClient.SetAllowInsecureTLS(cfg.App.AllowInsecureTLS)
 }
 
 func (a *App) OpenConfigFile() (*config.ConfigView, error) {
@@ -93,6 +114,7 @@ func (a *App) OpenConfigFile() (*config.ConfigView, error) {
 		return nil, err
 	}
 	a.activeConfigPath = selectedPath
+	a.applyConfig(cfg)
 	return cfg, nil
 }
 
