@@ -171,4 +171,6 @@ export interface TLSInfo {
   attemptedServerName?: string
   connection?: TLSConnectionView
   certificates: CertificateView[]
+  validationSkipped?: boolean
+  originalError?: string
 }
