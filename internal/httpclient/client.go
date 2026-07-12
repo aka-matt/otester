@@ -3,6 +3,7 @@ package httpclient
 import (
 	"context"
 	"net/http"
+	"strings"
 	"sync"
 	"time"
 
@@ -10,9 +11,10 @@ import (
 )
 
 type Client struct {
-	client      *http.Client
-	cancelFuncs map[string]context.CancelFunc
-	mu          sync.RWMutex
+	client           *http.Client
+	cancelFuncs      map[string]context.CancelFunc
+	mu               sync.RWMutex
+	allowInsecureTLS bool
 }
 
 func NewClient() *Client {
@@ -22,6 +24,22 @@ func NewClient() *Client {
 		},
 		cancelFuncs: make(map[string]context.CancelFunc),
 	}
+}
+
+// SetAllowInsecureTLS toggles the fallback behaviour: when a TLS handshake
+// fails because of certificate validation, the next request will be retried
+// once with InsecureSkipVerify=true. The flag is read on every DoRequest call,
+// so callers can flip it at runtime without restarting the client.
+func (c *Client) SetAllowInsecureTLS(enabled bool) {
+	c.mu.Lock()
+	c.allowInsecureTLS = enabled
+	c.mu.Unlock()
+}
+
+func (c *Client) getAllowInsecureTLS() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.allowInsecureTLS
 }
 
 func (c *Client) DoRequest(ctx context.Context, input *model.RequestInput) (*model.ResponseOutput, error) {
@@ -51,12 +69,47 @@ func (c *Client) DoRequest(ctx context.Context, input *model.RequestInput) (*mod
 	resp, err := c.client.Do(req)
 	duration := time.Since(start)
 
-	if err != nil {
-		return handleRequestError(input.RequestID, reqCtx.Err(), err, duration, req)
+	if err == nil {
+		defer resp.Body.Close()
+		return ParseResponse(resp, req, input.RequestID, duration)
 	}
-	defer resp.Body.Close()
 
-	return ParseResponse(resp, req, input.RequestID, duration)
+	// First attempt failed. Classify: is this a TLS error and is the insecure flag on?
+	if c.getAllowInsecureTLS() && isTLSError(err) {
+		retryClient := InsecureTLSClient()
+		retryStart := time.Now()
+		retryResp, retryErr := retryClient.Do(req.Clone(reqCtx))
+		retryDuration := time.Since(retryStart)
+
+		if retryErr == nil {
+			defer retryResp.Body.Close()
+			totalDuration := duration + retryDuration
+			output, parseErr := ParseResponse(retryResp, req, input.RequestID, totalDuration)
+			if parseErr != nil {
+				return nil, parseErr
+			}
+			if output.TLS != nil {
+				output.TLS.ValidationSkipped = true
+				output.TLS.OriginalError = err.Error()
+			}
+			return output, nil
+		}
+
+		// Retry also failed — fall through to handleRequestError with the second error.
+		return handleRequestError(input.RequestID, reqCtx.Err(), retryErr, duration+retryDuration, req)
+	}
+
+	return handleRequestError(input.RequestID, reqCtx.Err(), err, duration, req)
+}
+
+// isTLSError returns true when err's message contains "tls:" or "x509:",
+// matching the same heuristic as BuildTLSInfoFromError.
+func isTLSError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := err.Error()
+	return strings.Contains(msg, "tls:") || strings.Contains(msg, "x509:")
 }
 
 func (c *Client) CancelRequest(requestID string) error {

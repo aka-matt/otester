@@ -3,6 +3,7 @@ package httpclient
 import (
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -325,5 +326,119 @@ func TestClient_DoRequest_PostWithBody(t *testing.T) {
 	}
 	if receivedBody != `{"name":"test"}` {
 		t.Errorf("expected body %q, got %q", `{"name":"test"}`, receivedBody)
+	}
+}
+
+// Note: TestClient_DoRequest_TLSHandshakeFailure_FlagOff is intentionally
+// omitted — the existing TestClient_DoRequest_TLSHandshakeFailure already
+// covers the flag-off path since the flag defaults to false.
+
+func TestClient_DoRequest_TLSHandshakeFailure_FlagOn(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"ok":true}`))
+	}))
+	defer server.Close()
+
+	client := NewClient()
+	client.SetAllowInsecureTLS(true)
+
+	u, _ := url.Parse(server.URL)
+	input := &model.RequestInput{
+		RequestID:      "test-tls-retry",
+		Method:         "GET",
+		URL:            strings.Replace(server.URL, u.Hostname(), "127.0.0.1", 1),
+		TimeoutSeconds: 5,
+	}
+
+	output, err := client.DoRequest(context.Background(), input)
+	if err != nil {
+		t.Fatalf("DoRequest returned error: %v", err)
+	}
+	if output.ErrorCode != "" {
+		t.Errorf("expected no ErrorCode, got %q (%s)", output.ErrorCode, output.ErrorMessage)
+	}
+	if output.StatusCode != http.StatusOK {
+		t.Errorf("expected StatusCode 200, got %d", output.StatusCode)
+	}
+	if output.Body == "" {
+		t.Error("expected non-empty body from retry")
+	}
+	if output.TLS == nil {
+		t.Fatal("expected TLS info populated after retry")
+	}
+	if output.TLS.Status != "ok" {
+		t.Errorf("expected TLS.Status=ok after retry, got %s", output.TLS.Status)
+	}
+	if !output.TLS.ValidationSkipped {
+		t.Error("expected TLS.ValidationSkipped=true after retry")
+	}
+	if !strings.Contains(output.TLS.OriginalError, "x509:") {
+		t.Errorf("expected OriginalError to contain x509:, got %q", output.TLS.OriginalError)
+	}
+	if len(output.TLS.Certificates) < 1 {
+		t.Error("expected Certificates populated from retry's resp.TLS")
+	}
+}
+
+func TestClient_DoRequest_TLSOK_FlagOn_NoRetry(t *testing.T) {
+	// Server with self-signed cert; client trusts it via RootCAs so the first
+	// attempt succeeds — retry must not be taken.
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	rootCAs := x509.NewCertPool()
+	rootCAs.AddCert(server.Certificate())
+
+	client := NewClient()
+	client.client.Transport = &http.Transport{TLSClientConfig: &tls.Config{RootCAs: rootCAs}}
+	client.SetAllowInsecureTLS(true)
+
+	input := &model.RequestInput{
+		RequestID:      "test-tls-ok",
+		Method:         "GET",
+		URL:            server.URL,
+		TimeoutSeconds: 5,
+	}
+
+	output, err := client.DoRequest(context.Background(), input)
+	if err != nil {
+		t.Fatalf("DoRequest returned error: %v", err)
+	}
+	if output.TLS == nil || output.TLS.Status != "ok" {
+		t.Fatalf("expected TLS.Status=ok, got %+v", output.TLS)
+	}
+	if output.TLS.ValidationSkipped {
+		t.Error("ValidationSkipped should be false when first attempt succeeded")
+	}
+	if output.TLS.OriginalError != "" {
+		t.Errorf("OriginalError should be empty when first attempt succeeded, got %q", output.TLS.OriginalError)
+	}
+}
+
+func TestClient_DoRequest_NonTLSError_NoRetry(t *testing.T) {
+	// A non-TLS error (connection refused) must NOT trigger the retry.
+	client := NewClient()
+	client.SetAllowInsecureTLS(true)
+
+	input := &model.RequestInput{
+		RequestID:      "test-conn-refused",
+		Method:         "GET",
+		URL:            "http://127.0.0.1:1", // port 1 is reserved, almost certainly refused
+		TimeoutSeconds: 2,
+	}
+
+	output, err := client.DoRequest(context.Background(), input)
+	if err != nil {
+		t.Fatalf("DoRequest returned error: %v", err)
+	}
+	if output.ErrorCode != string(model.ErrConnectionFailed) {
+		t.Errorf("expected ErrorCode=%s, got %q", model.ErrConnectionFailed, output.ErrorCode)
+	}
+	if output.TLS != nil && output.TLS.Status == "handshake_failed" {
+		t.Errorf("retry should not be taken for non-TLS errors, but TLS.Status=handshake_failed")
 	}
 }
