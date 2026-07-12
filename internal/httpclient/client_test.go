@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -442,3 +443,32 @@ func TestClient_DoRequest_NonTLSError_NoRetry(t *testing.T) {
 		t.Errorf("retry should not be taken for non-TLS errors, but TLS.Status=handshake_failed")
 	}
 }
+
+func TestIsTLSError(t *testing.T) {
+	tests := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil error", nil, false},
+		{"context.DeadlineExceeded", context.DeadlineExceeded, false},
+		{"context.Canceled", context.Canceled, false},
+		{"wrapped context.DeadlineExceeded", &wrapError{context.DeadlineExceeded}, false},
+		{"wrapped context.Canceled", &wrapError{context.Canceled}, false},
+		{"tls handshake failure", errors.New("tls: handshake failure"), true},
+		{"x509 cert invalid", errors.New("x509: certificate signed by unknown authority"), true},
+		{"non-TLS error", errors.New("dial tcp: connection refused"), false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isTLSError(tt.err); got != tt.want {
+				t.Errorf("isTLSError(%v) = %v, want %v", tt.err, got, tt.want)
+			}
+		})
+	}
+}
+
+type wrapError struct{ inner error }
+
+func (w *wrapError) Error() string { return w.inner.Error() }
+func (w *wrapError) Unwrap() error { return w.inner }

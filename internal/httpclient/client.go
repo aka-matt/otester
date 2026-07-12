@@ -2,6 +2,7 @@ package httpclient
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 	"sync"
@@ -103,9 +104,14 @@ func (c *Client) DoRequest(ctx context.Context, input *model.RequestInput) (*mod
 }
 
 // isTLSError returns true when err's message contains "tls:" or "x509:",
-// matching the same heuristic as BuildTLSInfoFromError.
+// matching the same heuristic as BuildTLSInfoFromError. Context timeouts and
+// cancellations are never TLS handshake failures and are excluded here so the
+// insecure-TLS retry is not triggered for them.
 func isTLSError(err error) bool {
 	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
 		return false
 	}
 	msg := err.Error()
