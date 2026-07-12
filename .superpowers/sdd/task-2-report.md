@@ -1,47 +1,39 @@
-# Task 2 report: Render variable buttons and color-coded group cards
+# Task 2 report: Backend tls.go primitive formatters
 
-## Changed files
+## Status: DONE_WITH_CONCERNS
 
-- `frontend/src/components/EndpointList.vue`
-  - Added the selected-variable button selector above endpoint search.
-  - Reloads the active endpoint with `substituteVariables()` after a variable change.
-  - Loads selected endpoints through the selected-variable substitution path.
-  - Renders configured groups in stable, palette-accented cards and endpoints with unknown or missing group IDs in a neutral ungrouped card.
-  - Added an empty-search message and focus, hover, disabled, accent, and preserved selected endpoint styles.
-- `frontend/src/components/EndpointList.test.ts`
-  - Added active-Pinia component coverage for variable URL reload, distinct configured group accents, and unknown-group placement.
+## Commit hash
+
+`da55ce2086b72fa1720a151a71bd18e33b58c7aa`
+
+## One-line summary
+
+8/8 helper tests pass (TestTLSVersionString, TestCipherSuiteName, TestFormatFingerprint, TestPositionLabel, TestCertToPEM, TestDaysUntilExpiry_Past, TestDaysUntilExpiry_Future, TestKeyUsageToStrings, TestExtKeyUsageToStrings); full httpclient package remains green at 24/24.
+
+## Files
+
+- `internal/httpclient/tls.go` (new) — all eight helpers plus the `var _ = base64.StdEncoding.EncodeToString` import anchor.
+- `internal/httpclient/tls_test.go` (new) — 9 test functions (8 from the brief + `TestDaysUntilExpiry_Past`) plus `contains` and `equalStringSlices` helpers.
 
 ## TDD evidence
 
-- RED: `npm test -- src/components/EndpointList.test.ts` failed with all three expected missing-feature symptoms: no variable option to click, no group-card test IDs, and no ungrouped-card test ID.
-- GREEN: the same focused command passed 3/3 tests after the component implementation.
+- RED: first `go test ./internal/httpclient/ -run 'TestTLSVersionString|TestCipherSuiteName|TestFormatFingerprint|TestPositionLabel|TestCertToPEM|TestDaysUntilExpiry|TestKeyUsageToStrings|TestExtKeyUsageToStrings' -v` failed with `undefined: tlsVersionString`, `cipherSuiteName`, etc.
+- GREEN: after `internal/httpclient/tls.go` was created and corrected, the same focused command passed all 8 tests (TestDaysUntilExpiry is implemented as two tests, Past and Future).
 
 ## Verification
 
-- `npm test -- src/components/EndpointList.test.ts` — 3/3 passed.
-- `npm test && npm run build` — 2 test files / 8 tests passed; Vue typecheck and production Vite build passed.
-- Go tests were intentionally not run: this task does not touch Go, and the dispatch instructions specifically limited verification to the frontend because the baseline Go suite has unrelated failures.
+- Focused helper suite: 8/8 passed.
+- Full httpclient package: 24/24 passed; no pre-existing test regressed.
+- `go vet ./internal/httpclient/...` clean.
 
-## Self-review
+## Concerns (deviations from brief required to make the suite pass)
 
-- Confirmed each required selector and card test ID is present.
-- Confirmed configured colors are determined by configuration order, while unknown and missing group IDs both use the ungrouped card.
-- Confirmed endpoint selection and active-endpoint variable changes use the Task 1 selected-variable-only substitution API.
-- Confirmed task-scoped `git diff --check` is clean. A workspace-wide check still reports pre-existing trailing whitespace in `otester-PRD.md`, which this task does not modify.
-- Independent read-only review found no Critical or Important issues.
+The brief's reference implementation does not compile / does not satisfy its own tests against the installed toolchain (Go 1.26.4, `go.mod` declares `go 1.26.4`). Three deviations were required and are recorded here so the brief can be corrected for future tasks:
 
-## Concerns
+1. **`x509.KeyUsageNonRepudiation` does not exist in Go 1.26.** The constant was renamed to `x509.KeyUsageContentCommitment` upstream (see `/usr/local/go/src/crypto/x509/x509.go:589`); there is no compatibility alias. Used `KeyUsageContentCommitment` and emitted the string `"ContentCommitment"`. This is the only constant the new file references from that family, and it is not exercised by the brief's tests.
 
-- The three required component scenarios are covered. Separate regression tests for `aria-pressed`, disabled endpoints, and the empty-search message would further strengthen accessibility and edge-state coverage.
+2. **`tlsVersionString` default branch mismatch.** The brief's test `{0x0302, "unknown"}` contradicts the brief's implementation `return fmt.Sprintf("0x%04x", version)` (which yields `"0x0302"`). Followed the test contract and made the default branch return `"unknown"`.
 
-## Review follow-up: ungrouped OAuth indicator
+3. **`daysUntilExpiry` truncates due to clock skew.** The brief's `int(notAfter.Sub(time.Now()) / (24 * time.Hour))` returns 2 instead of 3 for `now+72h`, because the second `time.Now()` fires a few microseconds after the test's `time.Now()`. Replaced with `int(math.Round(notAfter.Sub(time.Now()).Hours() / 24))` so `now+72h` reliably rounds to 3 and `now-48h` remains negative. Added `"math"` to the import block.
 
-- Review identified that the ungrouped endpoint template did not render the existing OAuth lock icon.
-- RED: after adding an OAuth unknown-group endpoint fixture and a lock assertion, `npm test -- src/components/EndpointList.test.ts` failed 1/4 because the ungrouped card text did not contain `🔒`.
-- GREEN: added the same `v-if="endpoint.hasOAuth"` lock span used by configured endpoint cards to the ungrouped template. The focused suite then passed 4/4 and `npm run build` passed.
-
-## Final review follow-up: variable selector states
-
-- Review identified two explicit selector-state requirements: display a concise message when no variables are configured, and use only the ID when a variable has no environment.
-- RED: after adding tests for both states, `npm test -- src/components/EndpointList.test.ts` failed 2/6: the selector rendered no empty-state message, and the no-environment button label was `fallback (fallback)` instead of `fallback`.
-- GREEN: added the empty-state copy and conditional label rendering. The focused suite passed 6/6; full frontend verification passed 11/11; `npm run build` passed.
+All other helpers (`cipherSuiteName`, `formatFingerprint`, `positionLabel`, `certToPEM`, `keyUsageToStrings`, `extKeyUsageToStrings`) and the `var _ = base64.StdEncoding.EncodeToString` anchor were implemented verbatim from the brief.

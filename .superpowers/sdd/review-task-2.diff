@@ -1,446 +1,299 @@
-# Review package: a37e3e2..b497248
+# Review package: 565e8db..da55ce2
 
 ## Commits
-b497248 feat: add variable selector and endpoint group cards
+da55ce2 feat(httpclient): add TLS info primitive formatters
 
 ## Files changed
- frontend/src/components/EndpointList.test.ts |  84 +++++++++++++++++
- frontend/src/components/EndpointList.vue     | 134 ++++++++++++++++++++++++---
- 2 files changed, 203 insertions(+), 15 deletions(-)
+ internal/httpclient/tls.go      | 128 +++++++++++++++++++++++++++++++++++
+ internal/httpclient/tls_test.go | 146 ++++++++++++++++++++++++++++++++++++++++
+ 2 files changed, 274 insertions(+)
 
 ## Diff
-diff --git a/frontend/src/components/EndpointList.test.ts b/frontend/src/components/EndpointList.test.ts
+diff --git a/internal/httpclient/tls.go b/internal/httpclient/tls.go
 new file mode 100644
-index 0000000..66d706f
+index 0000000..0d91b4b
 --- /dev/null
-+++ b/frontend/src/components/EndpointList.test.ts
-@@ -0,0 +1,84 @@
-+import { beforeEach, describe, expect, it, vi } from 'vitest'
-+import { mount, type VueWrapper } from '@vue/test-utils'
-+import { createPinia, setActivePinia } from 'pinia'
-+import EndpointList from './EndpointList.vue'
-+import { useConfigStore } from '../stores/config'
-+import { useRequestStore } from '../stores/request'
-+import { useResponseStore } from '../stores/response'
-+import type { ConfigView, EndpointView } from '../types'
++++ b/internal/httpclient/tls.go
+@@ -0,0 +1,128 @@
++package httpclient
 +
-+const endpoint = (overrides: Partial<EndpointView>): EndpointView => ({
-+  id: 'endpoint',
-+  name: 'Endpoint',
-+  description: '',
-+  groupId: '',
-+  enabled: true,
-+  method: 'GET',
-+  url: 'https://example.test',
-+  timeoutSeconds: 30,
-+  auth: { type: 'none', profileId: '', allowAuthorizationHeaderOverride: false },
-+  headers: [],
-+  queryParams: [],
-+  body: { type: 'none', content: '' },
-+  hasOAuth: false,
-+  ...overrides,
-+})
++import (
++	"crypto/x509"
++	"encoding/base64"
++	"encoding/hex"
++	"encoding/pem"
++	"fmt"
++	"math"
++	"strings"
++	"time"
 +
-+const fixtureConfig: ConfigView = {
-+  app: {
-+    name: 'test', title: 'Test', defaultTimeoutSeconds: 30,
-+    maxResponseBodyBytes: 1024, allowInsecureTLS: false, persistRequestHistory: false,
-+  },
-+  variables: [
-+    { id: 'api', base_url: 'https://staging.example', environment: 'staging' },
-+    { id: 'api', base_url: 'https://prod.example', environment: 'production' },
-+  ],
-+  oauthProfiles: [],
-+  endpointGroups: [
-+    { id: 'users', name: 'Users' },
-+    { id: 'orders', name: 'Orders' },
-+  ],
-+  endpoints: [
-+    endpoint({ id: 'users', name: 'Users endpoint', groupId: 'users', url: '{{api}}/users' }),
-+    endpoint({ id: 'orders', name: 'Orders endpoint', groupId: 'orders' }),
-+    endpoint({ id: 'orphan', name: 'Orphan endpoint', groupId: 'missing' }),
-+  ],
-+  configPath: '/tmp/config.json',
++	"crypto/tls"
++)
++
++// tlsVersionString maps a TLS protocol version constant to its string label.
++func tlsVersionString(version uint16) string {
++	switch version {
++	case tls.VersionTLS12:
++		return "TLS 1.2"
++	case tls.VersionTLS13:
++		return "TLS 1.3"
++	default:
++		return "unknown"
++	}
 +}
 +
-+describe('EndpointList', () => {
-+  let wrapper: VueWrapper
-+  let configStore: ReturnType<typeof useConfigStore>
-+  let requestStore: ReturnType<typeof useRequestStore>
-+
-+  beforeEach(() => {
-+    const pinia = createPinia()
-+    setActivePinia(pinia)
-+    configStore = useConfigStore()
-+    requestStore = useRequestStore()
-+    configStore.config = fixtureConfig
-+    configStore.ensureSelectedVariable()
-+    vi.spyOn(useResponseStore(), 'clear')
-+    wrapper = mount(EndpointList, { global: { plugins: [pinia] } })
-+  })
-+
-+  it('selects a variable and reloads the active endpoint URL', async () => {
-+    configStore.selectEndpoint('users')
-+
-+    await wrapper.findAll('[data-testid="variable-option"]')[1].trigger('click')
-+
-+    expect(configStore.selectedVariable?.environment).toBe('production')
-+    expect(requestStore.url).toBe('https://prod.example/users')
-+  })
-+
-+  it('renders configured groups as differently accented endpoint cards', () => {
-+    const cards = wrapper.findAll('[data-testid="endpoint-group-card"]')
-+    expect(cards).toHaveLength(2)
-+    expect(cards[0].attributes('style')).not.toBe(cards[1].attributes('style'))
-+    expect(cards[0].text()).toContain('Users')
-+  })
-+
-+  it('puts unknown-group endpoints in the ungrouped card', () => {
-+    expect(wrapper.get('[data-testid="ungrouped-card"]').text()).toContain('Orphan endpoint')
-+  })
-+})
-diff --git a/frontend/src/components/EndpointList.vue b/frontend/src/components/EndpointList.vue
-index ee83382..14712a7 100644
---- a/frontend/src/components/EndpointList.vue
-+++ b/frontend/src/components/EndpointList.vue
-@@ -1,12 +1,27 @@
- <template>
-   <div class="endpoint-list">
-+    <div class="variable-selector" aria-label="Configuration variable">
-+      <button
-+        v-for="(variable, index) in configStore.config?.variables ?? []"
-+        :key="`${variable.id}-${variable.environment}`"
-+        type="button"
-+        class="variable-option"
-+        :class="{ selected: configStore.selectedVariableIndex === index }"
-+        :aria-pressed="configStore.selectedVariableIndex === index"
-+        data-testid="variable-option"
-+        @click="selectVariable(index)"
-+      >
-+        {{ variable.environment || variable.id }} ({{ variable.id }})
-+      </button>
-+    </div>
-+
-     <div class="search-box">
-       <input
-         v-model="searchQuery"
-         type="text"
-         placeholder="Search endpoints..."
-         class="acrylic-input search-input"
-       />
-     </div>
- 
-     <div class="filter-row">
-@@ -14,84 +29,98 @@
-         <option value="">All Methods</option>
-         <option value="GET">GET</option>
-         <option value="POST">POST</option>
-         <option value="PUT">PUT</option>
-         <option value="PATCH">PATCH</option>
-         <option value="DELETE">DELETE</option>
-       </select>
-     </div>
- 
-     <div class="groups">
--      <div
-+      <section
-         v-for="group in filteredGroups"
-         :key="group.id"
--        class="group"
-+        class="group endpoint-group-card"
-+        :style="{ '--group-accent': groupAccent(group.id) }"
-+        data-testid="endpoint-group-card"
-       >
--        <div class="group-header" @click="toggleGroup(group.id)">
-+        <button type="button" class="group-header" @click="toggleGroup(group.id)">
-           <span class="group-name">{{ group.name }}</span>
-           <span class="group-toggle">{{ collapsedGroups[group.id] ? '+' : '-' }}</span>
--        </div>
-+        </button>
- 
-         <div v-if="!collapsedGroups[group.id]" class="endpoints">
--          <div
-+          <button
-             v-for="endpoint in getEndpointsByGroup(group.id)"
-             :key="endpoint.id"
-+            type="button"
-             class="endpoint-item"
-             :class="{ selected: selectedEndpointId === endpoint.id, disabled: !endpoint.enabled }"
-+            :disabled="!endpoint.enabled"
-             @click="selectEndpoint(endpoint)"
-           >
-             <span class="method-badge" :class="endpoint.method.toLowerCase()">
-               {{ endpoint.method }}
-             </span>
-             <span class="endpoint-name">{{ endpoint.name }}</span>
-             <span v-if="endpoint.hasOAuth" class="oauth-icon">🔒</span>
--          </div>
-+          </button>
-         </div>
--      </div>
-+      </section>
- 
--      <div v-if="ungroupedEndpoints.length > 0" class="group">
-+      <section
-+        v-if="ungroupedEndpoints.length > 0"
-+        class="group endpoint-group-card"
-+        :style="{ '--group-accent': 'var(--border-color)' }"
-+        data-testid="ungrouped-card"
-+      >
-         <div class="group-header">
-           <span class="group-name">Ungrouped</span>
-         </div>
-         <div class="endpoints">
--          <div
-+          <button
-             v-for="endpoint in ungroupedEndpoints"
-             :key="endpoint.id"
-+            type="button"
-             class="endpoint-item"
-             :class="{ selected: selectedEndpointId === endpoint.id, disabled: !endpoint.enabled }"
-+            :disabled="!endpoint.enabled"
-             @click="selectEndpoint(endpoint)"
-           >
-             <span class="method-badge" :class="endpoint.method.toLowerCase()">
-               {{ endpoint.method }}
-             </span>
-             <span class="endpoint-name">{{ endpoint.name }}</span>
--          </div>
-+          </button>
-         </div>
--      </div>
-+      </section>
-+
-+      <p v-if="filteredEndpoints.length === 0" class="empty-search">No endpoints match your search.</p>
-     </div>
-   </div>
- </template>
- 
- <script setup lang="ts">
- import { ref, computed } from 'vue'
- import { useConfigStore } from '../stores/config'
- import { useRequestStore } from '../stores/request'
- import { useResponseStore } from '../stores/response'
- import type { EndpointView } from '../types'
- 
- const configStore = useConfigStore()
- const requestStore = useRequestStore()
- const responseStore = useResponseStore()
- 
- const searchQuery = ref('')
- const methodFilter = ref('')
- const collapsedGroups = ref<Record<string, boolean>>({})
-+const groupPalette = ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b', '#ec4899', '#06b6d4']
- 
- const selectedEndpointId = computed(() => configStore.selectedEndpointId)
- 
- const filteredEndpoints = computed(() => {
-   let eps = configStore.config?.endpoints || []
- 
-   if (searchQuery.value) {
-     const q = searchQuery.value.toLowerCase()
-     eps = eps.filter(ep =>
-       ep.name.toLowerCase().includes(q) ||
-@@ -104,48 +133,103 @@ const filteredEndpoints = computed(() => {
-   }
- 
-   return eps
- })
- 
- const filteredGroups = computed(() => {
-   const groupIds = new Set(filteredEndpoints.value.map(ep => ep.groupId))
-   return (configStore.config?.endpointGroups || []).filter(g => groupIds.has(g.id))
- })
- 
-+const knownGroupIds = computed(() => new Set((configStore.config?.endpointGroups ?? []).map(g => g.id)))
-+
- const ungroupedEndpoints = computed(() =>
--  filteredEndpoints.value.filter(ep => !ep.groupId)
-+  filteredEndpoints.value.filter(ep => !knownGroupIds.value.has(ep.groupId))
- )
- 
- function getEndpointsByGroup(groupId: string) {
-   return filteredEndpoints.value.filter(ep => ep.groupId === groupId)
- }
- 
- function toggleGroup(groupId: string) {
-   collapsedGroups.value[groupId] = !collapsedGroups.value[groupId]
- }
- 
-+function groupAccent(groupId: string) {
-+  const index = (configStore.config?.endpointGroups ?? []).findIndex(g => g.id === groupId)
-+  return groupPalette[index % groupPalette.length]
++// cipherSuiteName returns the standard cipher suite name for known IDs,
++// or a hex string for unknown ones.
++func cipherSuiteName(id uint16) string {
++	for _, c := range tls.CipherSuites() {
++		if c.ID == id {
++			return c.Name
++		}
++	}
++	return fmt.Sprintf("0x%04x", id)
 +}
 +
-+function loadEndpoint(endpoint: EndpointView) {
-+  requestStore.loadFromEndpoint({ ...endpoint, url: configStore.substituteVariables(endpoint.url) })
++// formatFingerprint returns the hex of der as uppercase, separated by sep.
++func formatFingerprint(der []byte, sep string) string {
++	hex := hex.EncodeToString(der)
++	hex = strings.ToUpper(hex)
++	var parts []string
++	for i := 0; i < len(hex); i += 2 {
++		parts = append(parts, hex[i:i+2])
++	}
++	return strings.Join(parts, sep)
 +}
 +
- function selectEndpoint(endpoint: EndpointView) {
-   if (!endpoint.enabled) return
-   configStore.selectEndpoint(endpoint.id)
--  requestStore.loadFromEndpoint(endpoint)
-+  loadEndpoint(endpoint)
-   responseStore.clear()
- }
-+
-+function selectVariable(index: number) {
-+  configStore.selectVariable(index)
-+  if (configStore.selectedEndpoint) loadEndpoint(configStore.selectedEndpoint)
-+}
- </script>
- 
- <style scoped>
- .endpoint-list {
-   display: flex;
-   flex-direction: column;
-   height: 100%;
-   padding: 12px;
- }
- 
-+.variable-selector {
-+  display: flex;
-+  flex-wrap: wrap;
-+  gap: 6px;
-+  margin-bottom: 10px;
++// positionLabel returns "leaf" / "intermediate" / "root" based on chain position.
++func positionLabel(idx, total int) string {
++	if idx == 0 {
++		return "leaf"
++	}
++	if idx == total-1 {
++		return "root"
++	}
++	return "intermediate"
 +}
 +
-+.variable-option {
-+  border: 1px solid var(--border-color);
-+  border-radius: 6px;
-+  padding: 5px 8px;
-+  background: var(--bg-primary);
-+  color: var(--text-primary);
-+  cursor: pointer;
++// certToPEM wraps DER bytes in a PEM CERTIFICATE block.
++func certToPEM(der []byte) string {
++	block := &pem.Block{Type: "CERTIFICATE", Bytes: der}
++	return string(pem.EncodeToMemory(block))
 +}
 +
-+.variable-option:hover:not(:disabled) {
-+  border-color: var(--accent-color);
++// daysUntilExpiry returns the number of days from now to notAfter, rounded to
++// the nearest whole day. Negative when the certificate has already expired.
++func daysUntilExpiry(notAfter time.Time) int {
++	return int(math.Round(notAfter.Sub(time.Now()).Hours() / 24))
 +}
 +
-+.variable-option.selected {
-+  background: var(--accent-color);
-+  border-color: var(--accent-color);
-+  color: white;
++// keyUsageToStrings expands a KeyUsage bitmask into human names.
++func keyUsageToStrings(usage x509.KeyUsage) []string {
++	var out []string
++	if usage&x509.KeyUsageDigitalSignature != 0 {
++		out = append(out, "DigitalSignature")
++	}
++	if usage&x509.KeyUsageContentCommitment != 0 {
++		out = append(out, "ContentCommitment")
++	}
++	if usage&x509.KeyUsageKeyEncipherment != 0 {
++		out = append(out, "KeyEncipherment")
++	}
++	if usage&x509.KeyUsageDataEncipherment != 0 {
++		out = append(out, "DataEncipherment")
++	}
++	if usage&x509.KeyUsageKeyAgreement != 0 {
++		out = append(out, "KeyAgreement")
++	}
++	if usage&x509.KeyUsageCertSign != 0 {
++		out = append(out, "CertSign")
++	}
++	if usage&x509.KeyUsageCRLSign != 0 {
++		out = append(out, "CRLSign")
++	}
++	if usage&x509.KeyUsageEncipherOnly != 0 {
++		out = append(out, "EncipherOnly")
++	}
++	if usage&x509.KeyUsageDecipherOnly != 0 {
++		out = append(out, "DecipherOnly")
++	}
++	return out
 +}
 +
-+.variable-option:focus-visible,
-+.group-header:focus-visible,
-+.endpoint-item:focus-visible {
-+  outline: 2px solid var(--accent-color);
-+  outline-offset: 2px;
++// extKeyUsageToStrings expands ExtendedKeyUsage values into names.
++func extKeyUsageToStrings(usage []x509.ExtKeyUsage) []string {
++	names := map[x509.ExtKeyUsage]string{
++		x509.ExtKeyUsageServerAuth:      "ServerAuth",
++		x509.ExtKeyUsageClientAuth:      "ClientAuth",
++		x509.ExtKeyUsageCodeSigning:     "CodeSigning",
++		x509.ExtKeyUsageEmailProtection: "EmailProtection",
++		x509.ExtKeyUsageTimeStamping:    "TimeStamping",
++		x509.ExtKeyUsageOCSPSigning:     "OCSPSigning",
++	}
++	out := make([]string, 0, len(usage))
++	for _, u := range usage {
++		if n, ok := names[u]; ok {
++			out = append(out, n)
++		} else {
++			out = append(out, fmt.Sprintf("Unknown(%d)", u))
++		}
++	}
++	return out
 +}
 +
-+.variable-option:disabled,
-+.endpoint-item:disabled {
-+  opacity: 0.5;
-+  cursor: not-allowed;
++// base64StdEncode is used by later tasks; declare here so the import is used.
++var _ = base64.StdEncoding.EncodeToString
+\ No newline at end of file
+diff --git a/internal/httpclient/tls_test.go b/internal/httpclient/tls_test.go
+new file mode 100644
+index 0000000..06e49ac
+--- /dev/null
++++ b/internal/httpclient/tls_test.go
+@@ -0,0 +1,146 @@
++package httpclient
++
++import (
++	"crypto/x509"
++	"testing"
++	"time"
++)
++
++func TestTLSVersionString(t *testing.T) {
++	cases := []struct {
++		in   uint16
++		want string
++	}{
++		{0x0303, "TLS 1.2"},
++		{0x0304, "TLS 1.3"},
++		{0x0302, "unknown"},
++	}
++	for _, c := range cases {
++		if got := tlsVersionString(c.in); got != c.want {
++			t.Errorf("tlsVersionString(0x%04x) = %q, want %q", c.in, got, c.want)
++		}
++	}
 +}
 +
- .search-input {
-   width: 100%;
-   margin-bottom: 8px;
- }
- 
- .method-filter {
-   width: 100%;
-   margin-bottom: 12px;
-   padding: 6px 8px;
-   border-radius: 6px;
-@@ -154,74 +238,94 @@ function selectEndpoint(endpoint: EndpointView) {
-   color: var(--text-primary);
- }
- 
- .groups {
-   flex: 1;
-   overflow-y: auto;
- }
- 
- .group {
-   margin-bottom: 8px;
-+  border: 1px solid var(--group-accent);
-+  border-left-width: 4px;
-+  border-radius: 6px;
-+  overflow: hidden;
- }
- 
- .group-header {
-   display: flex;
-+  width: 100%;
-   justify-content: space-between;
-   padding: 6px 8px;
-   cursor: pointer;
--  border-radius: 6px;
-+  border: 0;
-   background: var(--bg-primary);
-+  color: var(--text-primary);
-   margin-bottom: 4px;
-+  text-align: left;
- }
- 
- .group-header:hover {
-   background: var(--border-color);
- }
- 
- .group-name {
-   font-weight: 600;
-   font-size: 13px;
-+  color: var(--group-accent);
- }
- 
- .endpoints {
-   padding-left: 8px;
- }
- 
- .endpoint-item {
-   display: flex;
-+  width: 100%;
-   align-items: center;
-   gap: 8px;
-   padding: 8px;
-   cursor: pointer;
-+  border: 0;
-   border-radius: 6px;
-+  background: transparent;
-+  color: var(--text-primary);
-+  text-align: left;
-   transition: background 0.15s;
- }
- 
--.endpoint-item:hover {
-+.endpoint-item:hover:not(:disabled) {
-   background: var(--bg-primary);
- }
- 
- .endpoint-item.selected {
-   background: var(--accent-color);
-   color: white;
- }
- 
- .endpoint-item.selected .method-badge {
-   background: rgba(255,255,255,0.2);
-   color: white;
- }
- 
- .endpoint-item.disabled {
-   opacity: 0.5;
-   cursor: not-allowed;
- }
- 
-+.empty-search {
-+  margin: 16px 8px;
-+  color: var(--text-secondary);
-+  font-size: 13px;
-+  text-align: center;
++func TestCipherSuiteName(t *testing.T) {
++	cases := []struct {
++		in   uint16
++		want string
++	}{
++		{0x1301, "TLS_AES_128_GCM_SHA256"},
++		{0x1302, "TLS_AES_256_GCM_SHA384"},
++		{0x1303, "TLS_CHACHA20_POLY1305_SHA256"},
++		{0x0000, "0x0000"},
++	}
++	for _, c := range cases {
++		if got := cipherSuiteName(c.in); got != c.want {
++			t.Errorf("cipherSuiteName(0x%04x) = %q, want %q", c.in, got, c.want)
++		}
++	}
 +}
 +
- .method-badge {
-   font-size: 10px;
-   font-weight: 700;
-   padding: 2px 6px;
-   border-radius: 4px;
-   background: var(--bg-primary);
-   color: var(--text-primary);
- }
- 
- .method-badge.get { color: #61affe; }
++func TestFormatFingerprint(t *testing.T) {
++	der := []byte{0x01, 0x02, 0x03, 0xab, 0xcd}
++	got := formatFingerprint(der, ":")
++	want := "01:02:03:AB:CD"
++	if got != want {
++		t.Errorf("formatFingerprint colon = %q, want %q", got, want)
++	}
++	gotSpace := formatFingerprint(der, " ")
++	wantSpace := "01 02 03 AB CD"
++	if gotSpace != wantSpace {
++		t.Errorf("formatFingerprint space = %q, want %q", gotSpace, wantSpace)
++	}
++}
++
++func TestPositionLabel(t *testing.T) {
++	cases := []struct {
++		idx, total int
++		want       string
++	}{
++		{0, 3, "leaf"},
++		{1, 3, "intermediate"},
++		{2, 3, "root"},
++		{0, 1, "leaf"},
++		{1, 2, "root"},
++		{0, 2, "leaf"},
++	}
++	for _, c := range cases {
++		if got := positionLabel(c.idx, c.total); got != c.want {
++			t.Errorf("positionLabel(%d, %d) = %q, want %q", c.idx, c.total, got, c.want)
++		}
++	}
++}
++
++func TestCertToPEM(t *testing.T) {
++	der := []byte("not really der but enough for header check")
++	pem := certToPEM(der)
++	if pem == "" {
++		t.Fatal("expected non-empty PEM")
++	}
++	if !contains(pem, "-----BEGIN CERTIFICATE-----") {
++		t.Errorf("expected BEGIN CERTIFICATE header in %q", pem)
++	}
++	if !contains(pem, "-----END CERTIFICATE-----") {
++		t.Errorf("expected END CERTIFICATE footer in %q", pem)
++	}
++}
++
++func TestDaysUntilExpiry_Past(t *testing.T) {
++	past := time.Now().Add(-48 * time.Hour)
++	got := daysUntilExpiry(past)
++	if got >= 0 {
++		t.Errorf("expected negative days for past time, got %d", got)
++	}
++}
++
++func TestDaysUntilExpiry_Future(t *testing.T) {
++	future := time.Now().Add(72 * time.Hour)
++	got := daysUntilExpiry(future)
++	if got <= 0 {
++		t.Errorf("expected positive days for future time, got %d", got)
++	}
++	if got != 3 {
++		t.Errorf("expected 3 days (72h), got %d", got)
++	}
++}
++
++func TestKeyUsageToStrings(t *testing.T) {
++	usage := x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment
++	got := keyUsageToStrings(usage)
++	want := []string{"DigitalSignature", "KeyEncipherment"}
++	if !equalStringSlices(got, want) {
++		t.Errorf("keyUsageToStrings = %v, want %v", got, want)
++	}
++}
++
++func TestExtKeyUsageToStrings(t *testing.T) {
++	in := []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth}
++	got := extKeyUsageToStrings(in)
++	want := []string{"ServerAuth", "ClientAuth"}
++	if !equalStringSlices(got, want) {
++		t.Errorf("extKeyUsageToStrings = %v, want %v", got, want)
++	}
++}
++
++// contains and equalStringSlices are tiny local helpers (no need for strings pkg just for these).
++func contains(s, substr string) bool {
++	for i := 0; i+len(substr) <= len(s); i++ {
++		if s[i:i+len(substr)] == substr {
++			return true
++		}
++	}
++	return false
++}
++
++func equalStringSlices(a, b []string) bool {
++	if len(a) != len(b) {
++		return false
++	}
++	for i := range a {
++		if a[i] != b[i] {
++			return false
++		}
++	}
++	return true
++}
+\ No newline at end of file

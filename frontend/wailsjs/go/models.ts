@@ -275,6 +275,72 @@ export namespace config {
 
 export namespace model {
 	
+	export class CertificateView {
+	    position: string;
+	    subject: string;
+	    issuer: string;
+	    serialNumber: string;
+	    version: number;
+	    signatureAlgorithm: string;
+	    notBefore: string;
+	    notAfter: string;
+	    isExpired: boolean;
+	    isNotYetValid: boolean;
+	    daysToExpiry: number;
+	    subjectKeyId: string;
+	    authorityKeyId: string;
+	    sans: string[];
+	    keyAlgorithm: string;
+	    keySize: number;
+	    publicKeyPem: string;
+	    fingerprintSha1: string;
+	    fingerprintSha256: string;
+	    isCa: boolean;
+	    maxPathLength: number;
+	    keyUsage: string[];
+	    extendedKeyUsage: string[];
+	    crlDistributionPoints?: string[];
+	    policies?: string[];
+	    rawDer: string;
+	    pem: string;
+	    signatureBytes: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new CertificateView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.position = source["position"];
+	        this.subject = source["subject"];
+	        this.issuer = source["issuer"];
+	        this.serialNumber = source["serialNumber"];
+	        this.version = source["version"];
+	        this.signatureAlgorithm = source["signatureAlgorithm"];
+	        this.notBefore = source["notBefore"];
+	        this.notAfter = source["notAfter"];
+	        this.isExpired = source["isExpired"];
+	        this.isNotYetValid = source["isNotYetValid"];
+	        this.daysToExpiry = source["daysToExpiry"];
+	        this.subjectKeyId = source["subjectKeyId"];
+	        this.authorityKeyId = source["authorityKeyId"];
+	        this.sans = source["sans"];
+	        this.keyAlgorithm = source["keyAlgorithm"];
+	        this.keySize = source["keySize"];
+	        this.publicKeyPem = source["publicKeyPem"];
+	        this.fingerprintSha1 = source["fingerprintSha1"];
+	        this.fingerprintSha256 = source["fingerprintSha256"];
+	        this.isCa = source["isCa"];
+	        this.maxPathLength = source["maxPathLength"];
+	        this.keyUsage = source["keyUsage"];
+	        this.extendedKeyUsage = source["extendedKeyUsage"];
+	        this.crlDistributionPoints = source["crlDistributionPoints"];
+	        this.policies = source["policies"];
+	        this.rawDer = source["rawDer"];
+	        this.pem = source["pem"];
+	        this.signatureBytes = source["signatureBytes"];
+	    }
+	}
 	export class KeyValue {
 	    key: string;
 	    value: string;
@@ -341,6 +407,74 @@ export namespace model {
 		    return a;
 		}
 	}
+	export class TLSConnectionView {
+	    version: string;
+	    cipherSuite: string;
+	    cipherSuiteName: string;
+	    negotiatedProtocol?: string;
+	    serverName: string;
+	    resumed: boolean;
+	    scts?: string[];
+	    ocspStapled: boolean;
+	    peerCertificates: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new TLSConnectionView(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.version = source["version"];
+	        this.cipherSuite = source["cipherSuite"];
+	        this.cipherSuiteName = source["cipherSuiteName"];
+	        this.negotiatedProtocol = source["negotiatedProtocol"];
+	        this.serverName = source["serverName"];
+	        this.resumed = source["resumed"];
+	        this.scts = source["scts"];
+	        this.ocspStapled = source["ocspStapled"];
+	        this.peerCertificates = source["peerCertificates"];
+	    }
+	}
+	export class TLSInfo {
+	    status: string;
+	    error?: string;
+	    targetHost: string;
+	    attemptedServerName?: string;
+	    connection?: TLSConnectionView;
+	    certificates: CertificateView[];
+	
+	    static createFrom(source: any = {}) {
+	        return new TLSInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.status = source["status"];
+	        this.error = source["error"];
+	        this.targetHost = source["targetHost"];
+	        this.attemptedServerName = source["attemptedServerName"];
+	        this.connection = this.convertValues(source["connection"], TLSConnectionView);
+	        this.certificates = this.convertValues(source["certificates"], CertificateView);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class ResponseOutput {
 	    requestId: string;
 	    statusCode: number;
@@ -353,6 +487,7 @@ export namespace model {
 	    contentType: string;
 	    usedOAuth: boolean;
 	    tokenFromCache: boolean;
+	    tls?: TLSInfo;
 	    errorCode: string;
 	    errorMessage: string;
 	
@@ -373,10 +508,30 @@ export namespace model {
 	        this.contentType = source["contentType"];
 	        this.usedOAuth = source["usedOAuth"];
 	        this.tokenFromCache = source["tokenFromCache"];
+	        this.tls = this.convertValues(source["tls"], TLSInfo);
 	        this.errorCode = source["errorCode"];
 	        this.errorMessage = source["errorMessage"];
 	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
+	
 
 }
 
