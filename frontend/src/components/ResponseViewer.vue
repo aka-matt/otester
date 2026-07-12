@@ -6,8 +6,9 @@
 
     <div v-else class="response-content">
       <div class="response-overview acrylic-card">
-        <div class="status-code" :class="statusClass">
-          {{ response.statusCode }} {{ response.status }}
+        <div class="status-display">
+          <span class="status-badge" :class="statusClass">{{ response.statusCode }}</span>
+          <span class="status-text">{{ statusText }}</span>
         </div>
         <div class="meta-info">
           <span class="meta-item">
@@ -87,6 +88,13 @@ const statusClass = computed(() => {
   if (code >= 300 && code < 400) return 'status-redirect'
   if (code >= 400 && code < 500) return 'status-client-error'
   return 'status-server-error'
+})
+
+// Strip the leading "200 " / "404 " numeric prefix from response.status (which
+// comes from net/http as e.g. "200 OK") so we don't render the code twice.
+const statusText = computed(() => {
+  if (!response.value) return ''
+  return response.value.status.replace(/^\d+\s+/, '')
 })
 
 const formattedBody = computed(() => {
@@ -179,16 +187,36 @@ async function copyBody() {
   padding: 12px;
 }
 
-.status-code {
-  font-size: 18px;
-  font-weight: 600;
+.status-display {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   margin-bottom: 8px;
 }
 
-.status-success { color: var(--success-color); }
-.status-redirect { color: var(--accent-color); }
-.status-client-error { color: var(--warning-color); }
-.status-server-error { color: var(--danger-color); }
+.status-badge {
+  display: inline-block;
+  min-width: 48px;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  text-align: center;
+  font-family: 'Consolas', 'Monaco', monospace;
+  letter-spacing: 0.5px;
+}
+
+.status-text {
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.status-success   { background: var(--success-color); }
+.status-redirect   { background: var(--accent-color); }
+.status-client-error { background: var(--warning-color); }
+.status-server-error { background: var(--danger-color); }
 
 .meta-info {
   display: flex;
