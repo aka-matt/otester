@@ -11,7 +11,7 @@
     {
       "id": "dev",
       "base_url": "https://sample-dev.url/",
-      "environment": "uat"
+      "environment": "dev"
     },
     {
       "id": "uat",
@@ -19,7 +19,7 @@
       "environment": "uat"
     },
     {
-      "id": "dev",
+      "id": "internal",
       "base_url": "https://sample-internal.url",
       "environment": "internal"
     }
