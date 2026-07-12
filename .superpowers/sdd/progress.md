@@ -53,3 +53,28 @@ Task 4: complete (commits 591c720..0c08776, review clean; minor: CRLF churn, dea
 Task 5: complete (commits 0c08776..9588e2a, review clean)
 Task 6: complete (commits 9588e2a..691b8a9, review clean; concerns: pre-existing EndpointList failures + WSL rollup dep, both environment-only)
 Task 7: complete (final verification: 6 backend packages OK; frontend 21/21 tests pass; vue-tsc clean via npm run build; go vet clean; 8 commits on step5 since 1f1bf4d)
+
+### Whole-branch review fixes (Important findings)
+
+- **Commit hash:** `10ec38a55203d5d8d1c20a2c7f58972072d1c3e5`
+- **Commit message:** `fix(httpclient): preserve POST body and add timeout to insecure-TLS retry`
+- **One-line summary:** Two changes — (1) the TLS retry now re-populates `req.Body` from `GetBody()` before `retryClient.Do`, fixing silently dropped POST/PUT/PATCH bodies on retry; (2) `InsecureTLSClient(timeout time.Duration)` sets `Timeout` so a hung insecure connection cannot outlive the request's deadline.
+
+### Tests run
+
+- `go test ./internal/httpclient/ -v` — all PASS, including new `TestClient_DoRequest_PostBody_PreservedAcrossTLSRetry`. Targeted retry/POST tests:
+  - `TestClient_DoRequest_TLSHandshakeFailure` PASS
+  - `TestClient_DoRequest_PostWithBody` PASS
+  - `TestClient_DoRequest_TLSHandshakeFailure_FlagOn` PASS
+  - `TestClient_DoRequest_TLSOK_FlagOn_NoRetry` PASS
+  - `TestClient_DoRequest_NonTLSError_NoRetry` PASS
+  - `TestClient_DoRequest_PostBody_PreservedAcrossTLSRetry` PASS (the new test; server captures the body via `io.ReadAll(r.Body)` and asserts it equals the input)
+- `go vet ./...` — clean (no output).
+- `go build ./...` — clean (no output).
+- Final test status: `PASS` — `ok otester/internal/httpclient 5.613s`.
+
+### Change details
+
+- `internal/httpclient/client.go`: the retry block now clones the request, then if `retryReq.GetBody != nil` calls `retryReq.GetBody()` and assigns the result to `retryReq.Body` before `retryClient.Do`. The retry client is constructed via `InsecureTLSClient(time.Duration(input.TimeoutSeconds) * time.Second)`.
+- `internal/httpclient/tls.go`: `InsecureTLSClient(timeout time.Duration)` now sets `Timeout: timeout` on the returned `*http.Client` to match `NewClient`'s policy.
+- `internal/httpclient/client_test.go`: added `TestClient_DoRequest_PostBody_PreservedAcrossTLSRetry` — POSTs `{"name":"retry-body"}` JSON to an `httptest.NewTLSServer` reached via `127.0.0.1` (cert is valid for "example.com" so the first attempt fails x509 hostname validation). With `SetAllowInsecureTLS(true)`, the retry must succeed AND the server-side handler must observe the original body (locked via the handler storing `r.Method` and `io.ReadAll(r.Body)` under a mutex for the test to assert).
