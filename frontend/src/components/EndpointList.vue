@@ -11,7 +11,7 @@
         data-testid="variable-option"
         @click="selectVariable(index)"
       >
-        {{ variable.environment ? `${variable.environment} (${variable.id})` : variable.id }}
+        {{ variable.id }}
       </button>
       <p v-if="(configStore.config?.variables ?? []).length === 0" class="variable-empty">
         No configuration variables available.
