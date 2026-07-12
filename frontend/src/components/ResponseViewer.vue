@@ -32,10 +32,6 @@
       <n-tabs type="line" animated>
         <n-tab-pane name="body" tab="Body">
           <div class="body-content">
-            <div class="body-toolbar">
-              <button class="acrylic-btn-secondary" @click="formatBody">Format</button>
-              <button class="acrylic-btn-secondary" @click="copyBody">Copy</button>
-            </div>
             <pre class="body-pre" v-html="formattedBody"></pre>
           </div>
         </n-tab-pane>
@@ -150,16 +146,6 @@ function formatSize(bytes: number): string {
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB'
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB'
 }
-
-function formatBody() {
-  // Already formatted via computed
-}
-
-async function copyBody() {
-  if (response.value) {
-    await navigator.clipboard.writeText(response.value.body)
-  }
-}
 </script>
 
 <style scoped>
@@ -233,12 +219,6 @@ async function copyBody() {
   margin-top: 8px;
   font-size: 12px;
   color: var(--warning-color);
-}
-
-.body-toolbar {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 8px;
 }
 
 .body-pre {
