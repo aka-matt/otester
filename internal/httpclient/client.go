@@ -8,7 +8,9 @@ import (
 	"sync"
 	"time"
 
+	"otester/internal/logbus"
 	"otester/internal/model"
+	"otester/internal/security"
 )
 
 type Client struct {
@@ -16,14 +18,17 @@ type Client struct {
 	cancelFuncs      map[string]context.CancelFunc
 	mu               sync.RWMutex
 	allowInsecureTLS bool
+	logger           logbus.Logger
 }
 
-func NewClient() *Client {
+func NewClient(logger logbus.Logger) *Client {
+	if logger == nil {
+		logger = logbus.Nop()
+	}
 	return &Client{
-		client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		client:      &http.Client{Timeout: 30 * time.Second},
 		cancelFuncs: make(map[string]context.CancelFunc),
+		logger:      logger,
 	}
 }
 
@@ -66,17 +71,24 @@ func (c *Client) DoRequest(ctx context.Context, input *model.RequestInput) (*mod
 		}, nil
 	}
 
+	c.logger.Infof("→ %s %s", req.Method, security.RedactURL(req.URL.String()))
+	for k, v := range security.RedactHeaders(req.Header) {
+		c.logger.Debugf("  header %s: %s", k, strings.Join(v, ", "))
+	}
+
 	start := time.Now()
 	resp, err := c.client.Do(req)
 	duration := time.Since(start)
 
 	if err == nil {
 		defer resp.Body.Close()
+		c.logger.Infof("← %d %s (%d ms)", resp.StatusCode, resp.Status, duration.Milliseconds())
 		return ParseResponse(resp, req, input.RequestID, duration)
 	}
 
 	// First attempt failed. Classify: is this a TLS error and is the insecure flag on?
 	if c.getAllowInsecureTLS() && isTLSError(err) {
+		c.logger.Warnf("TLS validation failed, retrying with insecure TLS: %s", err.Error())
 		retryClient := InsecureTLSClient(time.Duration(input.TimeoutSeconds) * time.Second)
 		retryStart := time.Now()
 		// Clone makes a shallow copy of Body. The first attempt's Do has already
@@ -96,6 +108,7 @@ func (c *Client) DoRequest(ctx context.Context, input *model.RequestInput) (*mod
 		if retryErr == nil {
 			defer retryResp.Body.Close()
 			totalDuration := duration + retryDuration
+			c.logger.Infof("← %d %s (%d ms, insecure TLS)", retryResp.StatusCode, retryResp.Status, totalDuration.Milliseconds())
 			output, parseErr := ParseResponse(retryResp, req, input.RequestID, totalDuration)
 			if parseErr != nil {
 				return nil, parseErr
@@ -108,9 +121,11 @@ func (c *Client) DoRequest(ctx context.Context, input *model.RequestInput) (*mod
 		}
 
 		// Retry also failed — fall through to handleRequestError with the second error.
+		c.logger.Errorf("request failed: %v", retryErr)
 		return handleRequestError(input.RequestID, reqCtx.Err(), retryErr, duration+retryDuration, req)
 	}
 
+	c.logger.Errorf("request failed: %v", err)
 	return handleRequestError(input.RequestID, reqCtx.Err(), err, duration, req)
 }
 

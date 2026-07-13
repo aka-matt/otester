@@ -13,6 +13,7 @@ import (
 
 	"otester/internal/config"
 	"otester/internal/httpclient"
+	"otester/internal/logbus"
 	"otester/internal/model"
 	"otester/internal/oauth"
 )
@@ -37,7 +38,7 @@ type AppInfo struct {
 func NewApp() *App {
 	a := &App{
 		oauth:              oauth.NewMicrosoftOAuth(),
-		httpClient:         httpclient.NewClient(),
+		httpClient:         httpclient.NewClient(logbus.Nop()),
 		loadConfigFromPath: config.LoadConfigFromPath,
 	}
 	a.openFileDialog = func() (string, error) {

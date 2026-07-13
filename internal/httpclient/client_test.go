@@ -14,11 +14,12 @@ import (
 	"testing"
 	"time"
 
+	"otester/internal/logbus"
 	"otester/internal/model"
 )
 
 func TestNewClient(t *testing.T) {
-	client := NewClient()
+	client := NewClient(logbus.Nop())
 	if client == nil {
 		t.Fatal("expected non-nil Client")
 	}
@@ -34,7 +35,7 @@ func TestNewClient(t *testing.T) {
 }
 
 func TestClient_CancelRequest(t *testing.T) {
-	client := NewClient()
+	client := NewClient(logbus.Nop())
 
 	// Cancel a non-existent request should not error
 	err := client.CancelRequest("non-existent-id")
@@ -44,7 +45,7 @@ func TestClient_CancelRequest(t *testing.T) {
 }
 
 func TestClient_DoRequest_InvalidURL(t *testing.T) {
-	client := NewClient()
+	client := NewClient(logbus.Nop())
 
 	input := &model.RequestInput{
 		RequestID:      "test-invalid-url",
@@ -71,7 +72,7 @@ func TestClient_DoRequest_Success(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient()
+	client := NewClient(logbus.Nop())
 	client.client.Transport = &http.Transport{
 		TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
 	}
@@ -113,7 +114,7 @@ func TestClient_DoRequest_Timeout(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient()
+	client := NewClient(logbus.Nop())
 
 	input := &model.RequestInput{
 		RequestID:      "test-timeout",
@@ -150,7 +151,7 @@ func TestClient_DoRequest_Cancellation(t *testing.T) {
 	}))
 	defer func() { close(done); server.Close() }()
 
-	client := NewClient()
+	client := NewClient(logbus.Nop())
 
 	input := &model.RequestInput{
 		RequestID:      "test-cancel",
@@ -196,7 +197,7 @@ func TestClient_DoRequest_QueryParams(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient()
+	client := NewClient(logbus.Nop())
 
 	input := &model.RequestInput{
 		RequestID: "test-query-params",
@@ -232,7 +233,7 @@ func TestClient_DoRequest_Headers(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient()
+	client := NewClient(logbus.Nop())
 
 	input := &model.RequestInput{
 		RequestID: "test-headers",
@@ -265,7 +266,7 @@ func TestClient_DoRequest_TLSHandshakeFailure(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient()
+	client := NewClient(logbus.Nop())
 	// Use the default transport (does NOT skip verify) so the handshake fails.
 
 	// Replace the host portion of server.URL with 127.0.0.1 but keep the port.
@@ -306,7 +307,7 @@ func TestClient_DoRequest_PostWithBody(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient()
+	client := NewClient(logbus.Nop())
 
 	input := &model.RequestInput{
 		RequestID:      "test-post-body",
@@ -342,7 +343,7 @@ func TestClient_DoRequest_TLSHandshakeFailure_FlagOn(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient()
+	client := NewClient(logbus.Nop())
 	client.SetAllowInsecureTLS(true)
 
 	u, _ := url.Parse(server.URL)
@@ -394,7 +395,7 @@ func TestClient_DoRequest_TLSOK_FlagOn_NoRetry(t *testing.T) {
 	rootCAs := x509.NewCertPool()
 	rootCAs.AddCert(server.Certificate())
 
-	client := NewClient()
+	client := NewClient(logbus.Nop())
 	client.client.Transport = &http.Transport{TLSClientConfig: &tls.Config{RootCAs: rootCAs}}
 	client.SetAllowInsecureTLS(true)
 
@@ -422,7 +423,7 @@ func TestClient_DoRequest_TLSOK_FlagOn_NoRetry(t *testing.T) {
 
 func TestClient_DoRequest_NonTLSError_NoRetry(t *testing.T) {
 	// A non-TLS error (connection refused) must NOT trigger the retry.
-	client := NewClient()
+	client := NewClient(logbus.Nop())
 	client.SetAllowInsecureTLS(true)
 
 	input := &model.RequestInput{
@@ -470,7 +471,7 @@ func TestClient_DoRequest_PostBody_PreservedAcrossTLSRetry(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient()
+	client := NewClient(logbus.Nop())
 	client.SetAllowInsecureTLS(true)
 
 	// Force a TLS hostname mismatch: cert is valid for "example.com", we
@@ -518,6 +519,37 @@ func TestClient_DoRequest_PostBody_PreservedAcrossTLSRetry(t *testing.T) {
 	}
 	if gotBody != wantBody {
 		t.Errorf("expected server to observe body %q, got %q — body was lost on retry", wantBody, gotBody)
+	}
+}
+
+func TestDoRequestLogsRequestAndResponse(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	bus := logbus.New(50)
+	c := NewClient(bus)
+	_, err := c.DoRequest(context.Background(), &model.RequestInput{
+		RequestID:      "r1",
+		Method:         "GET",
+		URL:            srv.URL,
+		TimeoutSeconds: 5,
+	})
+	if err != nil {
+		t.Fatalf("DoRequest error: %v", err)
+	}
+
+	var joined string
+	for _, e := range bus.Snapshot() {
+		joined += e.Level + " " + e.Message + "\n"
+	}
+	if !strings.Contains(joined, "→ GET") {
+		t.Fatalf("missing request log line, got:\n%s", joined)
+	}
+	if !strings.Contains(joined, "← 200") {
+		t.Fatalf("missing response log line, got:\n%s", joined)
 	}
 }
 
