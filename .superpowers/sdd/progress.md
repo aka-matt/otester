@@ -78,3 +78,16 @@ Task 7: complete (final verification: 6 backend packages OK; frontend 21/21 test
 - `internal/httpclient/client.go`: the retry block now clones the request, then if `retryReq.GetBody != nil` calls `retryReq.GetBody()` and assigns the result to `retryReq.Body` before `retryClient.Do`. The retry client is constructed via `InsecureTLSClient(time.Duration(input.TimeoutSeconds) * time.Second)`.
 - `internal/httpclient/tls.go`: `InsecureTLSClient(timeout time.Duration)` now sets `Timeout: timeout` on the returned `*http.Client` to match `NewClient`'s policy.
 - `internal/httpclient/client_test.go`: added `TestClient_DoRequest_PostBody_PreservedAcrossTLSRetry` — POSTs `{"name":"retry-body"}` JSON to an `httptest.NewTLSServer` reached via `127.0.0.1` (cert is valid for "example.com" so the first attempt fails x509 hostname validation). With `SetAllowInsecureTLS(true)`, the retry must succeed AND the server-side handler must observe the original body (locked via the handler storing `r.Method` and `io.ReadAll(r.Body)` under a mutex for the test to assert).
+
+## HTTP / Auth Log Window (plan: 2026-07-13-http-auth-log-window.md)
+
+- Task 1: complete (commits 45e7852..dc70034, review clean)
+- Task 2: complete (commits dc70034..3f92936, review clean)
+- Task 3: complete (commits 3f92936..24d5d13, review clean)
+- Task 4: complete (commits 24d5d13..5c9e497, review clean; reviewer noted DRY/snake-case concern is brief-mandated and consistent with existing struct tag)
+- Task 5: complete (commits 5c9e497..edb5a38, review clean)
+- Task 6: complete (commits edb5a38..79d2bd4, review clean; one review-fix loop for append-only constraint)
+- Task 7: complete (commits 79d2bd4..39573e6, review clean; 8 pre-existing NModal test failures noted for branch review)
+- Task 8: complete (commits 39573e6..3270566, review clean)
+- Task 10: complete (commits 29e26f8..c3a40d0, review clean)
+- Task 11: complete; go build/vet/test clean across all packages; frontend build (vue-tsc + vite) succeeds; one in-task test type fix (de4bc8c) for beforeEach block body. Manual wails dev smoke not run (no desktop in this env).
