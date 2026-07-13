@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import { useLogsStore } from './logs'
 
 describe('logs store', () => {
-  beforeEach(() => setActivePinia(createPinia()))
+  beforeEach(() => { setActivePinia(createPinia()) })
 
   it('primes, appends, and joins text', () => {
     const s = useLogsStore()
