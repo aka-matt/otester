@@ -273,6 +273,27 @@ export namespace config {
 
 }
 
+export namespace logbus {
+	
+	export class Entry {
+	    time: string;
+	    level: string;
+	    message: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Entry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.time = source["time"];
+	        this.level = source["level"];
+	        this.message = source["message"];
+	    }
+	}
+
+}
+
 export namespace model {
 	
 	export class CertificateView {

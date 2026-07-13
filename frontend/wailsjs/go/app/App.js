@@ -6,12 +6,20 @@ export function CancelRequest(arg1) {
   return window['go']['app']['App']['CancelRequest'](arg1);
 }
 
+export function ClearLogs() {
+  return window['go']['app']['App']['ClearLogs']();
+}
+
 export function ClearTokenCache() {
   return window['go']['app']['App']['ClearTokenCache']();
 }
 
 export function GetAppInfo() {
   return window['go']['app']['App']['GetAppInfo']();
+}
+
+export function GetLogs() {
+  return window['go']['app']['App']['GetLogs']();
 }
 
 export function GetTokenStatus(arg1, arg2) {
@@ -44,12 +52,4 @@ export function SendRequest(arg1) {
 
 export function ValidateConfig() {
   return window['go']['app']['App']['ValidateConfig']();
-}
-
-export function ClearLogs() {
-  return window['go']['app']['App']['ClearLogs']();
-}
-
-export function GetLogs() {
-  return window['go']['app']['App']['GetLogs']();
 }
