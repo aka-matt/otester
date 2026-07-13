@@ -212,3 +212,25 @@ func TestGetCurrentConfig(t *testing.T) {
 		t.Errorf("Expected app name 'otester', got '%s'", cfg.App.Name)
 	}
 }
+
+func TestLoadOAuthProfilesFromPathReturnsRealSecret(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	json := `{"oauth_profiles":[{"id":"p1","client_id":"cid","client_secret":"real-secret","scope":"s","token_url":"https://t/","refreshBeforeExpirySeconds":30}]}`
+	if err := os.WriteFile(path, []byte(json), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	profiles, err := LoadOAuthProfilesFromPath(path)
+	if err != nil {
+		t.Fatalf("LoadOAuthProfilesFromPath error: %v", err)
+	}
+	if len(profiles) != 1 {
+		t.Fatalf("want 1 profile, got %d", len(profiles))
+	}
+	p := profiles[0]
+	if p.ID != "p1" || p.ClientID != "cid" || p.ClientSecret != "real-secret" ||
+		p.Scope != "s" || p.TokenURL != "https://t/" || p.RefreshBeforeExpirySeconds != 30 {
+		t.Fatalf("unexpected profile: %+v", p)
+	}
+}

@@ -61,6 +61,43 @@ func ReloadConfig() (*ConfigView, error) {
 	return LoadConfigFromFile()
 }
 
+func LoadOAuthProfilesFromPath(configPath string) ([]OAuthProfile, error) {
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, &ConfigError{Code: model.ErrConfigFileNotFound, Message: "config.json not found in " + configPath}
+		}
+		return nil, &ConfigError{Code: model.ErrConfigReadFailed, Message: err.Error()}
+	}
+	var rawCfg map[string]interface{}
+	if err := json.Unmarshal(data, &rawCfg); err != nil {
+		return nil, &ConfigError{Code: model.ErrConfigParseFailed, Message: err.Error()}
+	}
+	list, ok := rawCfg["oauth_profiles"].([]interface{})
+	if !ok {
+		return []OAuthProfile{}, nil
+	}
+	profiles := make([]OAuthProfile, 0, len(list))
+	for _, item := range list {
+		m, ok := item.(map[string]interface{})
+		if !ok {
+			continue
+		}
+		profiles = append(profiles, OAuthProfile{
+			ID:                         getString(m, "id"),
+			Name:                       getString(m, "name"),
+			Type:                       getString(m, "type"),
+			OrgIDUUID:                  getString(m, "org_id_uuid"),
+			ClientID:                   getString(m, "client_id"),
+			ClientSecret:               getString(m, "client_secret"),
+			Scope:                      getString(m, "scope"),
+			TokenURL:                   getString(m, "token_url"),
+			RefreshBeforeExpirySeconds: getInt(m, "refreshBeforeExpirySeconds", 60),
+		})
+	}
+	return profiles, nil
+}
+
 func GetCurrentConfig() *ConfigView {
 	return currentConfig
 }
