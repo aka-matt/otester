@@ -14,6 +14,8 @@ const { openConfigFile } = vi.hoisted(() => ({
 
 vi.mock('../../wailsjs/go/app/App', () => ({
   OpenConfigFile: openConfigFile,
+  ClearLogs: vi.fn(() => Promise.resolve()),
+  GetLogs: vi.fn(() => Promise.resolve([])),
 }))
 
 vi.mock('naive-ui', () => ({
@@ -23,6 +25,10 @@ vi.mock('naive-ui', () => ({
     emits: ['select'],
     template: '<div><slot /></div>',
   },
+  NModal: { name: 'NModal', props: ['show'], template: '<div><slot /></div>' },
+  NInput: { name: 'NInput', props: ['value'], template: '<textarea :value="value"></textarea>' },
+  NButton: { name: 'NButton', template: '<button><slot /></button>' },
+  NSpace: { name: 'NSpace', template: '<div><slot /></div>' },
   useMessage: () => message,
 }))
 
@@ -99,5 +105,16 @@ describe('MainView config file menu', () => {
     await selectFileMenuItem('open-config-file')
 
     expect(message.error).toHaveBeenCalledWith('Failed to open config file: Error: invalid config')
+  })
+
+  it('Tools menu contains an Open Logs item', () => {
+    const wrapper = mount(MainView, { global: { plugins: [createPinia()] } })
+    const dropdowns = wrapper.findAllComponents({ name: 'NDropdown' })
+    const tools = dropdowns.find((d) =>
+      (d.props('options') as Array<{ key: string }>).some((o) => o.key === 'clear-tokens'),
+    )
+    expect(tools).toBeTruthy()
+    const keys = (tools!.props('options') as Array<{ key: string }>).map((o) => o.key)
+    expect(keys).toContain('open-logs')
   })
 })

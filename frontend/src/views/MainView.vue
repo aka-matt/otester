@@ -35,6 +35,7 @@
     <StatusBar />
 
     <Base64Convert v-model:show="showBase64" />
+    <LogsViewer v-model:show="showLogs" />
   </div>
 </template>
 
@@ -47,6 +48,7 @@ import ResponseViewer from '../components/ResponseViewer.vue'
 import ThemeSwitcher from '../components/ThemeSwitcher.vue'
 import StatusBar from '../components/StatusBar.vue'
 import Base64Convert from '../components/Base64Convert.vue'
+import LogsViewer from '../components/LogsViewer.vue'
 import { useConfigStore } from '../stores/config'
 import { useResponseStore } from '../stores/response'
 import {
@@ -62,6 +64,7 @@ const responseStore = useResponseStore()
 const message = useMessage()
 
 const showBase64 = ref(false)
+const showLogs = ref(false)
 
 const fileMenuOptions = [
   { label: 'Reload Config', key: 'reload-config' },
@@ -79,6 +82,7 @@ const toolsMenuOptions = [
   { label: 'base64 Convert', key: 'base64-convert' },
   { label: 'Validate Config', key: 'validate-config' },
   { label: 'Clear Token Cache', key: 'clear-tokens' },
+  { label: 'Open Logs', key: 'open-logs' },
 ]
 
 const helpMenuOptions = [
@@ -116,6 +120,9 @@ async function handleMenuSelect(key: string) {
     case 'clear-tokens':
       await ClearTokenCache()
       message.success('Token cache cleared')
+      break
+    case 'open-logs':
+      showLogs.value = true
       break
     case 'about':
       const info = await GetAppInfo()
