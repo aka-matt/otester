@@ -174,3 +174,9 @@ export interface TLSInfo {
   validationSkipped?: boolean
   originalError?: string
 }
+
+export type LogEntry = {
+  time: string
+  level: string
+  message: string
+}
