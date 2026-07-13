@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"otester/internal/config"
+	"otester/internal/logbus"
+	"otester/internal/security"
 	"golang.org/x/sync/singleflight"
 )
 
@@ -17,12 +19,17 @@ type MicrosoftOAuth struct {
 	client  *http.Client
 	cache   *TokenCache
 	sfGroup singleflight.Group
+	logger  logbus.Logger
 }
 
-func NewMicrosoftOAuth() *MicrosoftOAuth {
+func NewMicrosoftOAuth(logger logbus.Logger) *MicrosoftOAuth {
+	if logger == nil {
+		logger = logbus.Nop()
+	}
 	return &MicrosoftOAuth{
 		client: &http.Client{Timeout: 30 * time.Second},
 		cache:  NewTokenCache(),
+		logger: logger,
 	}
 }
 
@@ -41,8 +48,10 @@ func (m *MicrosoftOAuth) GetAccessToken(ctx context.Context, profile *config.OAu
 
 	// Try cache first
 	if token, ok := m.cache.Get(cacheKey, refreshBefore); ok {
+		m.logger.Infof("token cache hit for client_id=%s scope=%s", profile.ClientID, profile.Scope)
 		return token, true, nil
 	}
+	m.logger.Infof("token cache miss for client_id=%s scope=%s", profile.ClientID, profile.Scope)
 
 	// Use singleflight to prevent concurrent refreshes
 	result, err, _ := m.sfGroup.Do(cacheKey, func() (interface{}, error) {
@@ -99,6 +108,9 @@ func (m *MicrosoftOAuth) fetchToken(ctx context.Context, profile *config.OAuthPr
 
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
+	m.logger.Infof("requesting token url=%s client_id=%s scope=%s",
+		security.RedactURL(tokenURL), profile.ClientID, profile.Scope)
+
 	resp, err := m.client.Do(req)
 	if err != nil {
 		return nil, err
@@ -106,17 +118,22 @@ func (m *MicrosoftOAuth) fetchToken(ctx context.Context, profile *config.OAuthPr
 	defer resp.Body.Close()
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		m.logger.Errorf("token request failed: status %d", resp.StatusCode)
 		return nil, fmt.Errorf("token request failed with status code %d", resp.StatusCode)
 	}
 
 	var tokenResp TokenResponse
 	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		m.logger.Errorf("token response parse failed: %v", err)
 		return nil, fmt.Errorf("failed to parse token response: %w", err)
 	}
 
 	if tokenResp.AccessToken == "" {
 		return nil, fmt.Errorf("access_token missing from token response")
 	}
+
+	m.logger.Infof("token acquired expires_in=%ds token=%s",
+		tokenResp.ExpiresIn, security.RedactBearerToken(tokenResp.AccessToken))
 
 	return &tokenResp, nil
 }

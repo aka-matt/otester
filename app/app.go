@@ -37,7 +37,7 @@ type AppInfo struct {
 
 func NewApp() *App {
 	a := &App{
-		oauth:              oauth.NewMicrosoftOAuth(),
+		oauth:              oauth.NewMicrosoftOAuth(logbus.Nop()),
 		httpClient:         httpclient.NewClient(logbus.Nop()),
 		loadConfigFromPath: config.LoadConfigFromPath,
 	}
