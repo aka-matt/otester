@@ -22,9 +22,13 @@ type App struct {
 	ctx                context.Context
 	oauth              *oauth.MicrosoftOAuth
 	httpClient         *httpclient.Client
+	logs               *logbus.Bus
 	activeConfigPath   string
 	loadConfigFromPath func(string) (*config.ConfigView, error)
+	loadOAuthProfiles  func(string) ([]config.OAuthProfile, error)
 	openFileDialog     func() (string, error)
+	getAccessToken     func(context.Context, *config.OAuthProfile) (string, bool, error)
+	doRequest          func(context.Context, *model.RequestInput) (*model.ResponseOutput, error)
 
 	mu               sync.RWMutex
 	allowInsecureTLS bool
@@ -36,11 +40,18 @@ type AppInfo struct {
 }
 
 func NewApp() *App {
+	logs := logbus.New(2000)
+	oauthClient := oauth.NewMicrosoftOAuth(logs)
+	httpClient := httpclient.NewClient(logs)
 	a := &App{
-		oauth:              oauth.NewMicrosoftOAuth(logbus.Nop()),
-		httpClient:         httpclient.NewClient(logbus.Nop()),
+		oauth:              oauthClient,
+		httpClient:         httpClient,
+		logs:               logs,
 		loadConfigFromPath: config.LoadConfigFromPath,
+		loadOAuthProfiles:  config.LoadOAuthProfilesFromPath,
 	}
+	a.getAccessToken = oauthClient.GetAccessToken
+	a.doRequest = httpClient.DoRequest
 	a.openFileDialog = func() (string, error) {
 		return wailsruntime.OpenFileDialog(a.ctx, wailsruntime.OpenDialogOptions{
 			Filters: []wailsruntime.FileFilter{{DisplayName: "JSON files", Pattern: "*.json"}},
@@ -51,6 +62,10 @@ func NewApp() *App {
 
 func (a *App) Startup(ctx context.Context) {
 	a.ctx = ctx
+	a.logs.SetEmit(func(e logbus.Entry) {
+		wailsruntime.EventsEmit(ctx, "log:entry", e)
+	})
+	a.logs.Infof("otester started")
 	cwd, err := os.Getwd()
 	if err != nil {
 		return
@@ -132,7 +147,51 @@ func (a *App) SendRequest(input *model.RequestInput) (*model.ResponseOutput, err
 	if a.ctx == nil {
 		return nil, fmt.Errorf("app context not initialized")
 	}
-	return a.httpClient.DoRequest(a.ctx, input)
+
+	usedOAuth := false
+	fromCache := false
+	if input.UseOAuth {
+		profiles, err := a.loadOAuthProfiles(a.activeConfigPath)
+		if err != nil {
+			return &model.ResponseOutput{RequestID: input.RequestID, ErrorCode: string(model.ErrConfigReadFailed), ErrorMessage: err.Error()}, nil
+		}
+		var profile *config.OAuthProfile
+		for i := range profiles {
+			if profiles[i].ID == input.OAuthProfileID {
+				profile = &profiles[i]
+				break
+			}
+		}
+		if profile == nil {
+			a.logs.Errorf("oauth profile %q not found", input.OAuthProfileID)
+			return &model.ResponseOutput{RequestID: input.RequestID, ErrorCode: string(model.ErrOAuthProfileNotFound), ErrorMessage: "oauth profile not found: " + input.OAuthProfileID}, nil
+		}
+		token, cached, err := a.getAccessToken(a.ctx, profile)
+		if err != nil {
+			return &model.ResponseOutput{RequestID: input.RequestID, ErrorCode: string(model.ErrOAuthTokenRequestFailed), ErrorMessage: err.Error()}, nil
+		}
+		input.Headers = append(input.Headers, model.KeyValue{Key: "Authorization", Value: "Bearer " + token, Enabled: true})
+		usedOAuth = true
+		fromCache = cached
+	}
+
+	out, err := a.doRequest(a.ctx, input)
+	if err != nil {
+		return nil, err
+	}
+	if out != nil {
+		out.UsedOAuth = usedOAuth
+		out.TokenFromCache = fromCache
+	}
+	return out, nil
+}
+
+func (a *App) GetLogs() []logbus.Entry {
+	return a.logs.Snapshot()
+}
+
+func (a *App) ClearLogs() {
+	a.logs.Clear()
 }
 
 func (a *App) CancelRequest(requestID string) error {
