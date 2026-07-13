@@ -87,12 +87,12 @@ func LoadOAuthProfilesFromPath(configPath string) ([]OAuthProfile, error) {
 			ID:                         getString(m, "id"),
 			Name:                       getString(m, "name"),
 			Type:                       getString(m, "type"),
-			OrgIDUUID:                  getString(m, "org_id_uuid"),
+			OrgIDUUID:                  getStringFirst(m, "org_id_uuid", "orgIdUuid"),
 			ClientID:                   getString(m, "client_id"),
 			ClientSecret:               getString(m, "client_secret"),
 			Scope:                      getString(m, "scope"),
-			TokenURL:                   getString(m, "token_url"),
-			RefreshBeforeExpirySeconds: getInt(m, "refreshBeforeExpirySeconds", 60),
+			TokenURL:                   getStringFirst(m, "token_url", "tokenUrl"),
+			RefreshBeforeExpirySeconds: getIntFirst(m, "refresh_before_expiry_seconds", "refreshBeforeExpirySeconds", 60),
 		})
 	}
 	return profiles, nil
@@ -122,10 +122,10 @@ func parseAppConfig(raw interface{}) AppConfig {
 	return AppConfig{
 		Name:                  getString(cfg, "name"),
 		Title:                 getString(cfg, "title"),
-		DefaultTimeoutSeconds: getInt(cfg, "defaultTimeoutSeconds", 30),
-		MaxResponseBodyBytes:  getInt64(cfg, "maxResponseBodyBytes", 10485760),
-		AllowInsecureTLS:      getBool(cfg, "allowInsecureTLS", false),
-		PersistRequestHistory: getBool(cfg, "persistRequestHistory", false),
+		DefaultTimeoutSeconds: getIntFirst(cfg, "default_timeout_seconds", "defaultTimeoutSeconds", 30),
+		MaxResponseBodyBytes:  getInt64First(cfg, "max_response_body_bytes", "maxResponseBodyBytes", 10485760),
+		AllowInsecureTLS:      getBoolFirst(cfg, "allow_insecure_tls", "allowInsecureTLS", false),
+		PersistRequestHistory: getBoolFirst(cfg, "persist_request_history", "persistRequestHistory", false),
 	}
 }
 
@@ -170,12 +170,12 @@ func parseOAuthProfiles(raw interface{}) []OAuthProfileView {
 			ID:                         getString(m, "id"),
 			Name:                       getString(m, "name"),
 			Type:                       getString(m, "type"),
-			OrgIDUUID:                  getString(m, "org_id_uuid"),
+			OrgIDUUID:                  getStringFirst(m, "org_id_uuid", "orgIdUuid"),
 			ClientID:                   getString(m, "client_id"),
 			ClientSecretMasked:         "******",
 			Scope:                      getString(m, "scope"),
-			TokenURL:                   getString(m, "token_url"),
-			RefreshBeforeExpirySeconds: getInt(m, "refreshBeforeExpirySeconds", 60),
+			TokenURL:                   getStringFirst(m, "token_url", "tokenUrl"),
+			RefreshBeforeExpirySeconds: getIntFirst(m, "refresh_before_expiry_seconds", "refreshBeforeExpirySeconds", 60),
 		})
 	}
 	return profiles
@@ -230,14 +230,14 @@ func parseEndpoints(raw interface{}, oauthProfiles []OAuthProfileView) []Endpoin
 			ID:             getString(m, "id"),
 			Name:           getString(m, "name"),
 			Description:    getString(m, "description"),
-			GroupID:        getString(m, "group_id"),
+			GroupID:        getStringFirst(m, "group_id", "groupId"),
 			Enabled:        getBool(m, "enabled", true),
 			Method:         getString(m, "method"),
 			URL:            getString(m, "url"),
-			TimeoutSeconds: getInt(m, "timeoutSeconds", 0),
+			TimeoutSeconds: getIntFirst(m, "timeout_seconds", "timeoutSeconds", 0),
 			Auth:           auth,
 			Headers:        parseKeyValues(m["headers"]),
-			QueryParams:    parseKeyValues(m["queryParameters"]),
+			QueryParams:    parseKeyValuesFirst(m, "query_parameters", "queryParameters"),
 			Body:           parseBodyConfig(m["body"]),
 			HasOAuth:       hasOAuth,
 		}
@@ -256,12 +256,21 @@ func parseAuthConfig(raw interface{}) AuthConfig {
 	}
 	return AuthConfig{
 		Type:                             getString(m, "type"),
-		ProfileID:                        getString(m, "profileId"),
-		AllowAuthorizationHeaderOverride: getBool(m, "allowAuthorizationHeaderOverride", false),
+		ProfileID:                        getStringFirst(m, "profile_id", "profileId"),
+		AllowAuthorizationHeaderOverride: getBoolFirst(m, "allow_authorization_header_override", "allowAuthorizationHeaderOverride", false),
 	}
 }
 
 func parseKeyValues(raw interface{}) []model.KeyValue {
+	return parseKeyValuesFromArray(raw)
+}
+
+func parseKeyValuesFirst(parent map[string]interface{}, primaryKey, fallbackKey string) []model.KeyValue {
+	v, _ := getValueFirst(parent, primaryKey, fallbackKey)
+	return parseKeyValuesFromArray(v)
+}
+
+func parseKeyValuesFromArray(raw interface{}) []model.KeyValue {
 	if raw == nil {
 		return []model.KeyValue{}
 	}
@@ -327,6 +336,78 @@ func getInt64(m map[string]interface{}, key string, defaultVal int64) int64 {
 
 func getBool(m map[string]interface{}, key string, defaultVal bool) bool {
 	if v, ok := m[key]; ok {
+		if b, ok := v.(bool); ok {
+			return b
+		}
+	}
+	return defaultVal
+}
+
+// getValueFirst returns the value found under primaryKey, or fallbackKey if primaryKey
+// is absent. Returns nil if neither key is present.
+func getValueFirst(m map[string]interface{}, primaryKey, fallbackKey string) (value interface{}, present bool) {
+	if v, ok := m[primaryKey]; ok {
+		return v, true
+	}
+	if v, ok := m[fallbackKey]; ok {
+		return v, true
+	}
+	return nil, false
+}
+
+// getStringFirst tries primaryKey then fallbackKey for string values.
+func getStringFirst(m map[string]interface{}, primaryKey, fallbackKey string) string {
+	if v, ok := m[primaryKey]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	if v, ok := m[fallbackKey]; ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
+}
+
+// getIntFirst tries primaryKey then fallbackKey for numeric values.
+func getIntFirst(m map[string]interface{}, primaryKey, fallbackKey string, defaultVal int) int {
+	if v, ok := m[primaryKey]; ok {
+		if f, ok := v.(float64); ok {
+			return int(f)
+		}
+	}
+	if v, ok := m[fallbackKey]; ok {
+		if f, ok := v.(float64); ok {
+			return int(f)
+		}
+	}
+	return defaultVal
+}
+
+// getInt64First tries primaryKey then fallbackKey for numeric values.
+func getInt64First(m map[string]interface{}, primaryKey, fallbackKey string, defaultVal int64) int64 {
+	if v, ok := m[primaryKey]; ok {
+		if f, ok := v.(float64); ok {
+			return int64(f)
+		}
+	}
+	if v, ok := m[fallbackKey]; ok {
+		if f, ok := v.(float64); ok {
+			return int64(f)
+		}
+	}
+	return defaultVal
+}
+
+// getBoolFirst tries primaryKey then fallbackKey for boolean values.
+func getBoolFirst(m map[string]interface{}, primaryKey, fallbackKey string, defaultVal bool) bool {
+	if v, ok := m[primaryKey]; ok {
+		if b, ok := v.(bool); ok {
+			return b
+		}
+	}
+	if v, ok := m[fallbackKey]; ok {
 		if b, ok := v.(bool); ok {
 			return b
 		}

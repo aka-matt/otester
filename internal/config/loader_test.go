@@ -216,7 +216,7 @@ func TestGetCurrentConfig(t *testing.T) {
 func TestLoadOAuthProfilesFromPathReturnsRealSecret(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")
-	json := `{"oauth_profiles":[{"id":"p1","client_id":"cid","client_secret":"real-secret","scope":"s","token_url":"https://t/","refreshBeforeExpirySeconds":30}]}`
+	json := `{"oauth_profiles":[{"id":"p1","client_id":"cid","client_secret":"real-secret","scope":"s","token_url":"https://t/","refresh_before_expiry_seconds":30}]}`
 	if err := os.WriteFile(path, []byte(json), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -232,5 +232,123 @@ func TestLoadOAuthProfilesFromPathReturnsRealSecret(t *testing.T) {
 	if p.ID != "p1" || p.ClientID != "cid" || p.ClientSecret != "real-secret" ||
 		p.Scope != "s" || p.TokenURL != "https://t/" || p.RefreshBeforeExpirySeconds != 30 {
 		t.Fatalf("unexpected profile: %+v", p)
+	}
+}
+
+// Regression: ensure snake_case keys (as defined by schemas/config.schema.json and
+// the bundled build/bin/config.json sample) are read for every section — app,
+// variables, oauth_profiles, endpoints. Previously the loader only read camelCase
+// keys, which silently left the OAuth profile fields empty and made endpoint
+// auth.profile_id fail to match any profile.
+func TestLoadConfigFromPathReadsSnakeCaseKeys(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	js := `{
+		"app": {
+			"name": "snake",
+			"title": "Snake",
+			"default_timeout_seconds": 45,
+			"max_response_body_bytes": 2097152,
+			"allow_insecure_tls": true,
+			"persist_request_history": true
+		},
+		"variables": [
+			{"id": "dev", "base_url": "https://dev/", "environment": "dev"}
+		],
+		"oauth_profiles": [
+			{
+				"id": "ms",
+				"name": "MS",
+				"type": "microsoft_client_credentials",
+				"org_id_uuid": "11111111-2222-3333-4444-555555555555",
+				"client_id": "cid-snake",
+				"client_secret": "secret-snake",
+				"scope": "https://graph.microsoft.com/.default",
+				"token_url": "https://login.microsoftonline.com/abc/oauth2/v2.0/token",
+				"refresh_before_expiry_seconds": 90
+			}
+		],
+		"endpoint_groups": [{"id": "g1", "name": "Group 1"}],
+		"endpoints": [
+			{
+				"id": "ep1",
+				"name": "Protected",
+				"description": "needs auth",
+				"group_id": "g1",
+				"enabled": true,
+				"method": "GET",
+				"url": "https://dev/x",
+				"timeout_seconds": 12,
+				"auth": {
+					"type": "oauth2",
+					"profile_id": "ms",
+					"allow_authorization_header_override": true
+				},
+				"headers": [{"key": "Accept", "value": "application/json", "enabled": true}],
+				"query_parameters": [{"key": "q", "value": "1", "enabled": true}],
+				"body": {"type": "none", "content": ""}
+			}
+		]
+	}`
+	if err := os.WriteFile(path, []byte(js), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := LoadConfigFromPath(path)
+	if err != nil {
+		t.Fatalf("LoadConfigFromPath error: %v", err)
+	}
+
+	// App
+	if cfg.App.DefaultTimeoutSeconds != 45 {
+		t.Errorf("default_timeout_seconds: want 45, got %d", cfg.App.DefaultTimeoutSeconds)
+	}
+	if cfg.App.MaxResponseBodyBytes != 2097152 {
+		t.Errorf("max_response_body_bytes: want 2097152, got %d", cfg.App.MaxResponseBodyBytes)
+	}
+	if !cfg.App.AllowInsecureTLS {
+		t.Errorf("allow_insecure_tls: want true")
+	}
+	if !cfg.App.PersistRequestHistory {
+		t.Errorf("persist_request_history: want true")
+	}
+
+	// OAuth profile
+	if len(cfg.OAuthProfiles) != 1 {
+		t.Fatalf("oauth_profiles: want 1, got %d", len(cfg.OAuthProfiles))
+	}
+	p := cfg.OAuthProfiles[0]
+	if p.ID != "ms" || p.ClientID != "cid-snake" || p.Scope != "https://graph.microsoft.com/.default" {
+		t.Errorf("oauth profile fields wrong: %+v", p)
+	}
+	if p.ClientSecretMasked != "******" {
+		t.Errorf("client secret must be masked, got %q", p.ClientSecretMasked)
+	}
+
+	// Endpoint — auth.profile_id must match and HasOAuth must be true
+	if len(cfg.Endpoints) != 1 {
+		t.Fatalf("endpoints: want 1, got %d", len(cfg.Endpoints))
+	}
+	ep := cfg.Endpoints[0]
+	if ep.GroupID != "g1" {
+		t.Errorf("group_id: want g1, got %q", ep.GroupID)
+	}
+	if ep.TimeoutSeconds != 12 {
+		t.Errorf("timeout_seconds: want 12, got %d", ep.TimeoutSeconds)
+	}
+	if ep.Auth.Type != "oauth2" {
+		t.Errorf("auth.type: want oauth2, got %q", ep.Auth.Type)
+	}
+	if ep.Auth.ProfileID != "ms" {
+		t.Errorf("auth.profile_id: want ms, got %q", ep.Auth.ProfileID)
+	}
+	if !ep.Auth.AllowAuthorizationHeaderOverride {
+		t.Errorf("allow_authorization_header_override: want true")
+	}
+	if !ep.HasOAuth {
+		t.Errorf("HasOAuth must be true when profile_id matches a known oauth_profiles entry")
+	}
+	if len(ep.QueryParams) != 1 || ep.QueryParams[0].Key != "q" {
+		t.Errorf("query_parameters not loaded: %+v", ep.QueryParams)
 	}
 }
