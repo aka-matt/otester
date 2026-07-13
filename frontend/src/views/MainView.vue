@@ -65,10 +65,8 @@ const showBase64 = ref(false)
 
 const fileMenuOptions = [
   { label: 'Reload Config', key: 'reload-config' },
-  { type: 'divider', key: 'd1' },
   { label: 'Open Config File', key: 'open-config-file' },
-  { label: 'base64 Convert', key: 'base64-convert' },
-  { type: 'divider', key: 'd2' },
+  { type: 'divider', key: 'd1' },
   { label: 'Exit', key: 'exit' },
 ]
 
@@ -78,6 +76,7 @@ const viewMenuOptions = [
 ]
 
 const toolsMenuOptions = [
+  { label: 'base64 Convert', key: 'base64-convert' },
   { label: 'Validate Config', key: 'validate-config' },
   { label: 'Clear Token Cache', key: 'clear-tokens' },
 ]
