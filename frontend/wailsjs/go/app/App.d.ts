@@ -26,3 +26,7 @@ export function ReloadConfig():Promise<config.ConfigView>;
 export function SendRequest(arg1:model.RequestInput):Promise<model.ResponseOutput>;
 
 export function ValidateConfig():Promise<config.ValidationResult>;
+
+export function ClearLogs():Promise<void>;
+
+export function GetLogs():Promise<Array<{time:string;level:string;message:string}>>;

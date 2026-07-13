@@ -45,3 +45,11 @@ export function SendRequest(arg1) {
 export function ValidateConfig() {
   return window['go']['app']['App']['ValidateConfig']();
 }
+
+export function ClearLogs() {
+  return window['go']['app']['App']['ClearLogs']();
+}
+
+export function GetLogs() {
+  return window['go']['app']['App']['GetLogs']();
+}
