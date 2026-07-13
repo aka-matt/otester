@@ -33,21 +33,24 @@
     </div>
 
     <StatusBar />
+
+    <Base64Convert v-model:show="showBase64" />
   </div>
 </template>
 
 <script setup lang="ts">
+import { ref } from 'vue'
 import { NDropdown, useMessage } from 'naive-ui'
 import EndpointList from '../components/EndpointList.vue'
 import RequestEditor from '../components/RequestEditor.vue'
 import ResponseViewer from '../components/ResponseViewer.vue'
 import ThemeSwitcher from '../components/ThemeSwitcher.vue'
 import StatusBar from '../components/StatusBar.vue'
+import Base64Convert from '../components/Base64Convert.vue'
 import { useConfigStore } from '../stores/config'
 import { useResponseStore } from '../stores/response'
 import {
   OpenConfigFile,
-  OpenLogDirectory,
   ValidateConfig,
   ClearTokenCache,
   GetAppInfo,
@@ -58,11 +61,13 @@ const configStore = useConfigStore()
 const responseStore = useResponseStore()
 const message = useMessage()
 
+const showBase64 = ref(false)
+
 const fileMenuOptions = [
   { label: 'Reload Config', key: 'reload-config' },
   { type: 'divider', key: 'd1' },
   { label: 'Open Config File', key: 'open-config-file' },
-  { label: 'Open Log Directory', key: 'open-log-dir' },
+  { label: 'base64 Convert', key: 'base64-convert' },
   { type: 'divider', key: 'd2' },
   { label: 'Exit', key: 'exit' },
 ]
@@ -98,8 +103,8 @@ async function handleMenuSelect(key: string) {
         message.error('Failed to open config file: ' + String(error))
       }
       break
-    case 'open-log-dir':
-      await OpenLogDirectory()
+    case 'base64-convert':
+      showBase64.value = true
       break
     case 'validate-config':
       const result = await ValidateConfig()
