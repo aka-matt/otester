@@ -54,12 +54,21 @@ func (c *TokenCache) Clear() {
 	c.tokens = make(map[string]*CachedToken)
 }
 
-// GetStatus returns the token status for a given key without exposing internal mutex
-func (c *TokenCache) GetStatus(key string) (token *CachedToken, ok bool) {
+// GetStatus returns the token entry for a key. If refreshBefore > 0 and the
+// cached entry is within that window of expiry, ok is false so callers treat
+// the entry as missing (forcing a re-fetch). The returned bool mirrors Get:
+// true only when the entry exists AND is still safely usable.
+func (c *TokenCache) GetStatus(key string, refreshBefore time.Duration) (token *CachedToken, ok bool) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	token, ok = c.tokens[key]
-	return token, ok
+	t, found := c.tokens[key]
+	if !found {
+		return nil, false
+	}
+	if refreshBefore > 0 && time.Until(t.ExpiresAt) < refreshBefore {
+		return nil, false
+	}
+	return t, true
 }
 
 func BuildCacheKey(tokenURL, clientID, scope string) string {

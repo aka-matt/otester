@@ -563,10 +563,11 @@ export namespace model {
 export namespace oauth {
 	
 	export class TokenStatus {
-	    ProfileID: string;
-	    HasToken: boolean;
+	    profileId: string;
+	    hasToken: boolean;
+	    fromCache: boolean;
 	    // Go type: time
-	    ExpiresAt?: any;
+	    expiresAt?: any;
 	
 	    static createFrom(source: any = {}) {
 	        return new TokenStatus(source);
@@ -574,9 +575,10 @@ export namespace oauth {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.ProfileID = source["ProfileID"];
-	        this.HasToken = source["HasToken"];
-	        this.ExpiresAt = this.convertValues(source["ExpiresAt"], null);
+	        this.profileId = source["profileId"];
+	        this.hasToken = source["hasToken"];
+	        this.fromCache = source["fromCache"];
+	        this.expiresAt = this.convertValues(source["expiresAt"], null);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

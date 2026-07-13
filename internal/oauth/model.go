@@ -15,7 +15,8 @@ type CachedToken struct {
 }
 
 type TokenStatus struct {
-	ProfileID string
-	HasToken  bool
-	ExpiresAt *time.Time
+	ProfileID string     `json:"profileId"`
+	HasToken  bool       `json:"hasToken"`
+	FromCache bool       `json:"fromCache"`
+	ExpiresAt *time.Time `json:"expiresAt,omitempty"`
 }

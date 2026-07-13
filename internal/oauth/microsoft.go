@@ -66,11 +66,11 @@ func (m *MicrosoftOAuth) GetAccessToken(ctx context.Context, profile *config.OAu
 			return nil, err
 		}
 
-		// Cache it
-		expiresAt := time.Now().Add(time.Duration(profile.RefreshBeforeExpirySeconds) * time.Second)
-		if profile.RefreshBeforeExpirySeconds == 0 {
-			expiresAt = time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
-		}
+		// Cache it for the token's full lifetime as reported by the OAuth
+		// server. The refresh_before_expiry_seconds value is NOT the lifetime;
+		// it is the slack window before actual expiry at which GetToken /
+		// GetTokenStatus should treat the entry as needing a refresh.
+		expiresAt := time.Now().Add(time.Duration(tokenResp.ExpiresIn) * time.Second)
 
 		// Store unredacted token in cache; redaction is only for logging/display
 		m.cache.Set(cacheKey, &CachedToken{
@@ -151,15 +151,20 @@ func (m *MicrosoftOAuth) GetTokenStatus(profileID string, profile *config.OAuthP
 
 	cacheKey := BuildCacheKey(tokenURL, profile.ClientID, profile.Scope)
 
-	token, ok := m.cache.GetStatus(cacheKey)
+	refreshBefore := time.Duration(profile.RefreshBeforeExpirySeconds) * time.Second
+	if refreshBefore == 0 {
+		refreshBefore = 60 * time.Second
+	}
 
+	token, ok := m.cache.GetStatus(cacheKey, refreshBefore)
 	if !ok {
-		return &TokenStatus{ProfileID: profileID, HasToken: false}, nil
+		return &TokenStatus{ProfileID: profileID, HasToken: false, FromCache: false}, nil
 	}
 
 	return &TokenStatus{
 		ProfileID: profileID,
 		HasToken:  true,
+		FromCache: true,
 		ExpiresAt: &token.ExpiresAt,
 	}, nil
 }

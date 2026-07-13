@@ -96,14 +96,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, onMounted, watch } from 'vue'
 import { NTabs, NTabPane } from 'naive-ui'
 import { useRequestStore } from '../stores/request'
 import { useConfigStore } from '../stores/config'
 import { useResponseStore } from '../stores/response'
 import { useOAuthStore } from '../stores/oauth'
 import KeyValueEditor from './KeyValueEditor.vue'
-import { SendRequest, CancelRequest, GetTokenStatus } from '../../wailsjs/go/app/App'
+import { SendRequest, CancelRequest } from '../../wailsjs/go/app/App'
 import { model } from '../../wailsjs/go/models'
 
 const requestStore = useRequestStore()
@@ -200,10 +200,8 @@ async function sendRequest() {
     }
 
     if (useOAuth.value && oauthProfileId.value) {
-      const status = await GetTokenStatus(oauthProfileId.value, null as any)
-      if (status) {
-        oauthStore.updateStatus(oauthProfileId.value, status as any)
-      }
+      await oauthStore.refreshStatus(oauthProfileId.value)
+      scheduleExpiryRefresh()
     }
   } catch (e) {
     console.error('[DEBUG] Request failed:', e)
@@ -212,6 +210,54 @@ async function sendRequest() {
     console.log('[DEBUG] sendRequest done')
   }
 }
+
+// Periodic refresh so the UI flips back to "No token cached" once the
+// refresh_before_expiry_seconds window starts (the backend enforces this;
+// we just re-poll to keep the indicator accurate).
+let expiryTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleExpiryRefresh() {
+  if (expiryTimer) {
+    clearTimeout(expiryTimer)
+    expiryTimer = null
+  }
+  const status = tokenStatus.value
+  if (!status || !status.hasToken || !status.expiresAt) return
+  const ms = new Date(status.expiresAt).getTime() - Date.now()
+  // Cap to 5 minutes so we don't park a long timer forever; the watcher on
+  // oauthProfileId and any post-send refresh will re-arm if needed.
+  const delay = Math.max(1000, Math.min(ms, 5 * 60 * 1000))
+  expiryTimer = setTimeout(async () => {
+    if (oauthProfileId.value) {
+      await oauthStore.refreshStatus(oauthProfileId.value)
+      scheduleExpiryRefresh()
+    }
+  }, delay)
+}
+
+watch(oauthProfileId, async (id) => {
+  if (id) await oauthStore.refreshStatus(id)
+  scheduleExpiryRefresh()
+})
+
+watch(useOAuth, async (enabled) => {
+  if (enabled && oauthProfileId.value) {
+    await oauthStore.refreshStatus(oauthProfileId.value)
+    scheduleExpiryRefresh()
+  }
+})
+
+onMounted(() => {
+  if (useOAuth.value && oauthProfileId.value) {
+    oauthStore.refreshStatus(oauthProfileId.value).then(scheduleExpiryRefresh)
+  }
+})
+
+onBeforeUnmount(() => {
+  if (expiryTimer) {
+    clearTimeout(expiryTimer)
+    expiryTimer = null
+  }
+})
 </script>
 
 <style scoped>

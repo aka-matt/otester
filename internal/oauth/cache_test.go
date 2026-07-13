@@ -105,3 +105,32 @@ func TestBuildCacheKey(t *testing.T) {
 		t.Errorf("cache key has unexpected format: %s", key)
 	}
 }
+
+// GetStatus must respect the refreshBefore window the same way Get does:
+// if the cached entry is within refreshBefore of expiry, the entry is
+// reported as missing so callers force a re-fetch.
+func TestTokenCache_GetStatusHonorsRefreshWindow(t *testing.T) {
+	cache := NewTokenCache()
+	cache.Set("k1", &CachedToken{
+		AccessToken: "fresh",
+		ExpiresAt:   time.Now().Add(1 * time.Hour),
+	})
+	cache.Set("k2", &CachedToken{
+		AccessToken: "almost-expired",
+		ExpiresAt:   time.Now().Add(30 * time.Second),
+	})
+
+	if _, ok := cache.GetStatus("k1", 60*time.Second); !ok {
+		t.Error("k1 has 1h lifetime and 60s window — must be reported as ok")
+	}
+	if _, ok := cache.GetStatus("k2", 60*time.Second); ok {
+		t.Error("k2 has 30s lifetime and 60s window — must be reported as expired")
+	}
+}
+
+func TestTokenCache_GetStatusMissingKey(t *testing.T) {
+	cache := NewTokenCache()
+	if _, ok := cache.GetStatus("missing", 0); ok {
+		t.Error("missing key must return ok=false")
+	}
+}
