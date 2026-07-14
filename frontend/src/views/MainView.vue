@@ -5,9 +5,11 @@
         <n-dropdown trigger="click" :options="fileMenuOptions" @select="handleMenuSelect">
           <span class="menu-item">File</span>
         </n-dropdown>
+        <!--
         <n-dropdown trigger="click" :options="viewMenuOptions" @select="handleMenuSelect">
           <span class="menu-item">View</span>
         </n-dropdown>
+        -->
         <n-dropdown trigger="click" :options="toolsMenuOptions" @select="handleMenuSelect">
           <span class="menu-item">Tools</span>
         </n-dropdown>
@@ -69,14 +71,14 @@ const showLogs = ref(false)
 const fileMenuOptions = [
   { label: 'Reload Config', key: 'reload-config' },
   { label: 'Open Config File', key: 'open-config-file' },
-  { type: 'divider', key: 'd1' },
-  { label: 'Exit', key: 'exit' },
+  // { type: 'divider', key: 'd1' },
+  // { label: 'Exit', key: 'exit' },
 ]
 
-const viewMenuOptions = [
-  { label: 'Toggle Left Panel', key: 'toggle-left' },
-  { label: 'Toggle Right Panel', key: 'toggle-right' },
-]
+// const viewMenuOptions = [
+//   { label: 'Toggle Left Panel', key: 'toggle-left' },
+//   { label: 'Toggle Right Panel', key: 'toggle-right' },
+// ]
 
 const toolsMenuOptions = [
   { label: 'base64 Convert', key: 'base64-convert' },
