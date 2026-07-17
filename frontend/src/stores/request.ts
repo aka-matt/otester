@@ -7,7 +7,7 @@ export const useRequestStore = defineStore('request', () => {
   const url = ref('')
   const headers = ref<KeyValue[]>([])
   const queryParams = ref<KeyValue[]>([])
-  const bodyType = ref<'none' | 'json' | 'text' | 'x-www-form-urlencoded' | 'raw'>('none')
+  const bodyType = ref<'none' | 'json' | 'text' | 'xml' | 'x-www-form-urlencoded' | 'raw'>('none')
   const body = ref('')
   const timeoutSeconds = ref(30)
   const useOAuth = ref(false)

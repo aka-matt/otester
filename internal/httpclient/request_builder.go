@@ -50,6 +50,8 @@ func BuildRequest(ctx context.Context, input *model.RequestInput) (*http.Request
 		req.Header.Set("Content-Type", "application/json")
 	case "text":
 		req.Header.Set("Content-Type", "text/plain")
+	case "xml":
+		req.Header.Set("Content-Type", "application/xml")
 	case "x-www-form-urlencoded":
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	}

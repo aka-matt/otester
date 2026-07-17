@@ -154,3 +154,22 @@ func TestBuildRequest_FormURLEncodedBodyType(t *testing.T) {
 		t.Errorf("expected Content-Type application/x-www-form-urlencoded, got %s", req.Header.Get("Content-Type"))
 	}
 }
+
+func TestBuildRequest_XMLBodyType(t *testing.T) {
+	input := &model.RequestInput{
+		RequestID:      "test-xml",
+		Method:         "POST",
+		URL:            "https://httpbin.org/post",
+		BodyType:       "xml",
+		Body:           `<?xml version="1.0"?><root><item/></root>`,
+		TimeoutSeconds: 30,
+	}
+
+	req, err := BuildRequest(context.Background(), input)
+	if err != nil {
+		t.Fatalf("BuildRequest failed: %v", err)
+	}
+	if req.Header.Get("Content-Type") != "application/xml" {
+		t.Errorf("expected Content-Type application/xml, got %s", req.Header.Get("Content-Type"))
+	}
+}

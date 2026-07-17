@@ -16,7 +16,7 @@ export interface RequestInput {
   url: string
   headers: KeyValue[]
   queryParams: KeyValue[]
-  bodyType: 'none' | 'json' | 'text' | 'x-www-form-urlencoded' | 'raw'
+  bodyType: 'none' | 'json' | 'text' | 'xml' | 'x-www-form-urlencoded' | 'raw'
   body: string
   timeoutSeconds: number
   useOAuth: boolean

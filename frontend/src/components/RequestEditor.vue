@@ -43,6 +43,7 @@
             <option value="none">None</option>
             <option value="json">JSON</option>
             <option value="text">Text</option>
+            <option value="xml">XML</option>
             <option value="x-www-form-urlencoded">x-www-form-urlencoded</option>
             <option value="raw">Raw</option>
           </select>
@@ -51,7 +52,7 @@
             <textarea
               v-model="body"
               class="body-textarea"
-              :placeholder="bodyType === 'json' ? '{\n  key: value\n}' : 'Enter request body...'"
+              :placeholder="bodyType === 'json' ? '{\n  key: value\n}' : bodyType === 'xml' ? '<?xml version=\"1.0\"?>\n<root>\n  <item/>\n</root>' : 'Enter request body...'"
               spellcheck="false"
             />
           </div>
