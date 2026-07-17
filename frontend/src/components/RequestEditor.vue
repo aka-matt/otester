@@ -52,7 +52,7 @@
             <textarea
               v-model="body"
               class="body-textarea"
-              :placeholder="bodyType === 'json' ? '{\n  key: value\n}' : bodyType === 'xml' ? '<?xml version=\"1.0\"?>\n<root>\n  <item/>\n</root>' : 'Enter request body...'"
+              :placeholder="bodyPlaceholder"
               spellcheck="false"
             />
           </div>
@@ -143,6 +143,17 @@ const bodyType = computed({
 const body = computed({
   get: () => requestStore.body,
   set: (v) => { requestStore.body = v }
+})
+
+const bodyPlaceholder = computed(() => {
+  switch (bodyType.value) {
+    case 'json':
+      return '{\n  key: value\n}'
+    case 'xml':
+      return '<?xml version="1.0"?>\n<root>\n  <item/>\n</root>'
+    default:
+      return 'Enter request body...'
+  }
 })
 
 const sending = computed(() => requestStore.sending)
