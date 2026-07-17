@@ -37,23 +37,28 @@ func BuildRequest(ctx context.Context, input *model.RequestInput) (*http.Request
 		return nil, err
 	}
 
-	// Set headers
+	// Set headers first so an explicit user Content-Type (e.g. text/xml for
+	// SOAP) is already present before the bodyType default is considered.
 	for _, h := range input.Headers {
 		if h.Enabled {
 			req.Header.Add(h.Key, h.Value)
 		}
 	}
 
-	// Set content type for body types
-	switch input.BodyType {
-	case "json":
-		req.Header.Set("Content-Type", "application/json")
-	case "text":
-		req.Header.Set("Content-Type", "text/plain")
-	case "xml":
-		req.Header.Set("Content-Type", "application/xml")
-	case "x-www-form-urlencoded":
-		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	// Only fill a Content-Type default when the caller did not already set one.
+	// Unconditionally overwriting here breaks SOAP/XML APIs that require
+	// text/xml or application/soap+xml instead of application/xml.
+	if req.Header.Get("Content-Type") == "" {
+		switch input.BodyType {
+		case "json":
+			req.Header.Set("Content-Type", "application/json")
+		case "text":
+			req.Header.Set("Content-Type", "text/plain")
+		case "xml":
+			req.Header.Set("Content-Type", "application/xml")
+		case "x-www-form-urlencoded":
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		}
 	}
 
 	return req, nil

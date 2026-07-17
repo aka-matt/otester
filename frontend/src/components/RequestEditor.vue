@@ -192,15 +192,31 @@ async function sendRequest() {
 
   try {
     console.log('[DEBUG] calling SendRequest', { requestId, url: url.value })
+    // Variable substitution must apply to every string surface that can carry
+    // {{placeholders}} — not just the URL. Body/header values that still
+    // contain {{environment}} or {{base_url}} cause the server to reject
+    // the request as malformed XML/JSON.
+    const substitutedHeaders = headers.value
+      .filter(h => h.enabled)
+      .map(h => ({
+        ...h,
+        value: configStore.substituteVariables(h.value),
+      }))
+    const substitutedQuery = queryParams.value
+      .filter(q => q.enabled)
+      .map(q => ({
+        ...q,
+        value: configStore.substituteVariables(q.value),
+      }))
     const result = await SendRequest(model.RequestInput.createFrom({
       requestId,
       endpointId: configStore.selectedEndpointId || '',
       method: method.value,
       url: configStore.substituteVariables(requestStore.url),
-      headers: headers.value.filter(h => h.enabled),
-      queryParams: queryParams.value.filter(q => q.enabled),
+      headers: substitutedHeaders,
+      queryParams: substitutedQuery,
       bodyType: bodyType.value,
-      body: body.value,
+      body: configStore.substituteVariables(body.value),
       timeoutSeconds: requestStore.timeoutSeconds,
       useOAuth: useOAuth.value,
       oauthProfileId: oauthProfileId.value,

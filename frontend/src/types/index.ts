@@ -79,7 +79,7 @@ export interface AuthConfig {
 }
 
 export interface BodyConfig {
-  type: 'none' | 'json' | 'text' | 'x-www-form-urlencoded' | 'raw'
+  type: 'none' | 'json' | 'text' | 'xml' | 'x-www-form-urlencoded' | 'raw'
   content: string
 }
 

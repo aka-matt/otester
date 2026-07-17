@@ -49,7 +49,11 @@ func (c *Client) getAllowInsecureTLS() bool {
 }
 
 func (c *Client) DoRequest(ctx context.Context, input *model.RequestInput) (*model.ResponseOutput, error) {
-	reqCtx, cancel := context.WithTimeout(ctx, time.Duration(input.TimeoutSeconds)*time.Second)
+	timeout := time.Duration(input.TimeoutSeconds) * time.Second
+	if timeout <= 0 {
+		timeout = 30 * time.Second
+	}
+	reqCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
 	c.mu.Lock()
@@ -75,6 +79,17 @@ func (c *Client) DoRequest(ctx context.Context, input *model.RequestInput) (*mod
 	for k, v := range security.RedactHeaders(req.Header) {
 		c.logger.Debugf("  header %s: %s", k, strings.Join(v, ", "))
 	}
+	// Log body details so POST/PUT/PATCH payload problems are visible in
+	// Open Logs. Body content is redacted for secrets; empty bodies are
+	// noted explicitly so a missing body is not confused with a quiet log.
+	if input.BodyType != "" && input.BodyType != "none" {
+		c.logger.Infof("  body type=%s content-length=%d", input.BodyType, req.ContentLength)
+		if input.Body != "" {
+			c.logger.Debugf("  body: %s", security.RedactJSON(input.Body))
+		} else {
+			c.logger.Warnf("  body is empty (type=%s)", input.BodyType)
+		}
+	}
 
 	start := time.Now()
 	resp, err := c.client.Do(req)
@@ -89,7 +104,7 @@ func (c *Client) DoRequest(ctx context.Context, input *model.RequestInput) (*mod
 	// First attempt failed. Classify: is this a TLS error and is the insecure flag on?
 	if c.getAllowInsecureTLS() && isTLSError(err) {
 		c.logger.Warnf("TLS validation failed, retrying with insecure TLS: %s", err.Error())
-		retryClient := InsecureTLSClient(time.Duration(input.TimeoutSeconds) * time.Second)
+		retryClient := InsecureTLSClient(timeout)
 		retryStart := time.Now()
 		// Clone makes a shallow copy of Body. The first attempt's Do has already
 		// consumed the underlying reader, so re-using it would silently send an
